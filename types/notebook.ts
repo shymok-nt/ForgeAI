@@ -1,5 +1,5 @@
-export type NotebookFolder='Ders'|'İş'|'Kişisel';
-export type FolderFilter='Tümü'|NotebookFolder;
+export type NotebookFolder=string;
+export type FolderFilter=string;
 export type PageTemplate='boş'|'çizgili'|'kareli'|'noktalı';
 export type PaperColor='beyaz'|'krem';
 export type SortBy='updated'|'title'|'created';
