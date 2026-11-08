@@ -3,17 +3,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Star } from 'lucide-react-native';
 import { colors } from '@/theme/colors';
 import { fonts } from '@/theme/fonts';
-import { darken, isLightCover } from '@/theme/covers';
+import { darken, lighten, isLightCover } from '@/utils/color';
 import type { Notebook, NotebookDraft } from '@/types/notebook';
 type CoverData=Pick<NotebookDraft,'title'|'coverType'|'coverColor'|'coverImageUri'|'showTitleOnCover'> & {favorite?:boolean};
 export function NotebookCover({notebook,width=160}:{notebook:CoverData;width?:number}){
  const height=width*4/3,light=notebook.coverType==='color'&&isLightCover(notebook.coverColor);
  const foreground=light?colors.ink:colors.surface;
+ const coverColor=notebook.coverColor;
  return <View style={[styles.shadow,{width,height}]}>
-  <View style={[styles.cover,{backgroundColor:notebook.coverType==='color'?colors.ink:notebook.coverColor}]}>
+  <View style={[styles.cover,{backgroundColor:notebook.coverType==='color'?colors.ink:coverColor}]}>
    {notebook.coverType==='image'&&notebook.coverImageUri&&<Image source={{uri:notebook.coverImageUri}} resizeMode="cover" style={StyleSheet.absoluteFill}/>}
-   <LinearGradient pointerEvents="none" colors={notebook.coverType==='image'?['#FFFFFF10','#00000008','#00000050']:['#FFFFFF16','#FFFFFF02','#00000010']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/>
-   <View style={[styles.spine,{width:Math.max(8,width*0.0875),backgroundColor:notebook.coverType==='color'?darken(notebook.coverColor):'#151525B8'}]}>
+   <LinearGradient pointerEvents="none" colors={notebook.coverType==='image'?['#FFFFFF10','#00000008','#00000050']:[lighten(coverColor,0.06),coverColor,darken(coverColor,0.04)]} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/>
+   <View style={[styles.spine,{width:Math.max(8,width*0.0875),backgroundColor:notebook.coverType==='color'?darken(coverColor,0.2):'#151525B8'}]}>
     {[0,1,2,3].map(i=><View key={i} style={[styles.stitch,{width:Math.max(3,width*0.03),height:Math.max(3,width*0.03)}]}/>)}
    </View>
    {notebook.showTitleOnCover&&<View style={[styles.label,{left:width*0.15,right:width*0.07,bottom:notebook.coverType==='image'?height*0.29:height*0.13,backgroundColor:notebook.coverType==='image'?'#00000070':light?'#FFFFFF9C':'#FFFFFF27'}]}><Text numberOfLines={3} style={{fontFamily:fonts.heading,fontSize:Math.max(9,width*0.1),textAlign:'center',color:foreground}}>{notebook.title}</Text></View>}
