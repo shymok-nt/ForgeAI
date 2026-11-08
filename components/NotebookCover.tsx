@@ -4,6 +4,7 @@ import { Star } from 'lucide-react-native';
 import { useTheme } from '@/theme/ThemeProvider';
 import type { ThemeColors } from '@/theme/colors';
 import { lightColors } from '@/theme/colors';
+import { defaultCoverColor } from '@/theme/covers';
 import { fonts } from '@/theme/fonts';
 import { darken, lighten, isLightCover } from '@/utils/color';
 import type { Notebook, NotebookDraft } from '@/types/notebook';
