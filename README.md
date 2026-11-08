@@ -27,3 +27,25 @@ Galeri kapakları `expo-file-system` ile uygulamanın `documentDirectory/covers/
 - `types/notebook.ts`: Notebook modeli
 - `store/notebookStore.ts`: bellek içi defter işlemleri
 - `utils/`: tarih, sıralama ve kapak dosyaları
+
+## Kalıcı kayıt (SQLite)
+
+Uygulama açılırken `db/database.ts` içindeki `getDatabase()` bağlantıyı kurar, WAL ve foreign key ayarlarını açar ve `db/migrations.ts` migrasyonlarını uygular. Sonra `store/notebookStore.ts` içindeki `hydrate()` defterleri, klasörleri ve ayarları belleğe yükler. Başarısız olursa Türkçe hata ekranından yeniden denenebilir.
+
+Veritabanı: `notex.db`. Şema v1:
+- `folders`: sabit kimlikli Ders, İş, Kişisel klasörleri; sıra ve oluşturulma tarihi
+- `notebooks`: defter bilgileri, klasör bağlantısı, kapak türü/rengi/göreli dosya yolu, şablon, favori, tarihler
+- `pages`: defter bağlantısı, 0'dan başlayan sıra, sayfa şablonu, kâğıt rengi, sonraki çizim özelliği için `{"v":1,"strokes":[]}` JSON içeriği
+- `settings`: `sortBy`, `viewMode`, `selectedFolderId` anahtarları
+
+Defterlerin `pageCount` değeri `COUNT(pages.id)` ile sorgulanır; ayrıca kaydedilmez. Kapak resimleri `covers/<uuid>.<uzantı>` şeklinde göreli yolla tutulur; `utils/files.ts` görüntülerken uygulama klasöründen tam URI oluşturur.
+
+### Yeni tablo/sütun eklemek
+
+`db/migrations.ts` içindeki `migrations` listesine mevcut sürümden büyük, sıralı yeni bir kayıt ekle (örneğin `version: 2`). `run(db)` içinde `ALTER TABLE` veya `CREATE TABLE` SQL'ini yaz. Önceki migrasyonları değiştirme. Açılışta `PRAGMA user_version` kontrol edilir ve yalnızca eksik migrasyonlar transaction içinde uygulanır. Mevcut kullanıcı verilerini silme.
+
+### Sayfa yönetimi
+
+Defteri açınca ilk sayfa görüntülenir. Alttaki **Sayfalar** düğmesiyle sayfa ekleme, silme, yukarı/aşağı taşıma ve şablon değiştirme denenebilir. Son sayfa silinemez. Çizim alanı henüz uygulanmadı.
+
+Not: Daha önceki sürümde defterler yalnızca bellekte tutuluyordu. Bu eski oturumlar uygulama kapatılınca zaten kayboluyordu; SQLite öncesi bellek verisini geriye dönük kurtarmak mümkün değildir.
