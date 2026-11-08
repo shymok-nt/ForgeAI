@@ -49,3 +49,11 @@ Defterlerin `pageCount` değeri `COUNT(pages.id)` ile sorgulanır; ayrıca kayde
 Defteri açınca ilk sayfa görüntülenir. Alttaki **Sayfalar** düğmesiyle sayfa ekleme, silme, yukarı/aşağı taşıma ve şablon değiştirme denenebilir. Son sayfa silinemez. Çizim alanı henüz uygulanmadı.
 
 Not: Daha önceki sürümde defterler yalnızca bellekte tutuluyordu. Bu eski oturumlar uygulama kapatılınca zaten kayboluyordu; SQLite öncesi bellek verisini geriye dönük kurtarmak mümkün değildir.
+
+## Tema, klasörler ve arama
+
+`theme/ThemeProvider.tsx` uygulamanın Sistem / Açık / Koyu temasını yönetir. Yeni ekran ve bileşenlerde `const {colors,scheme,mode}=useTheme()` ile aktif renkleri al; arayüz renkleri için sabit hex yerine `colors.background`, `colors.surface`, `colors.ink`, `colors.muted`, `colors.accent` gibi token'ları kullan. Kapak renkleri ve kâğıt şablonları temadan bağımsızdır. Tema tercihi `settings.theme` anahtarında saklanır.
+
+`folderRepository` klasör oluşturma, yeniden adlandırma, silme ve sıralama işlemlerini SQLite'da yapar. Klasör silindiğinde `ON DELETE SET NULL` sayesinde defterler korunur ve Klasörsüz grubuna geçer. `FolderChips` klasörleri Zustand'daki SQLite'dan yüklenmiş listeden alır.
+
+`app/search.tsx` defter başlıklarını bellekte 200 ms gecikmeyle filtreler. `utils/search.ts` Türkçe harfleri ve aksanları normalleştirir. En fazla 8 son arama `settings.recentSearches` içinde JSON olarak saklanır. Sayfa içeriğinde arama yapılmaz.
