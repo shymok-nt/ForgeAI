@@ -1,0 +1,6 @@
+import { ScrollView,Pressable,Text,StyleSheet } from 'react-native';
+import { colors } from '@/theme/colors';
+import { fonts } from '@/theme/fonts';
+import type { FolderFilter,NotebookFolder } from '@/types/notebook';
+export function FolderChips({value,onChange,includeAll=true}:{value:FolderFilter;onChange:(value:FolderFilter)=>void;includeAll?:boolean}){const folders:FolderFilter[]=includeAll?['Tümü','Ders','İş','Kişisel']:['Ders','İş','Kişisel'];return <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow:0}} contentContainerStyle={styles.row}>{folders.map(folder=><Pressable key={folder} accessibilityRole="button" accessibilityLabel={`${folder} klasörü`} accessibilityState={{selected:value===folder}} onPress={()=>onChange(folder)} style={[styles.chip,value===folder&&styles.active]}><Text style={[styles.text,value===folder&&styles.activeText]}>{folder}</Text></Pressable>)}</ScrollView>}
+const styles=StyleSheet.create({row:{gap:8,alignItems:'center',paddingRight:20},chip:{height:44,paddingHorizontal:18,borderWidth:1.5,borderColor:colors.border,borderRadius:24,alignItems:'center',justifyContent:'center'},active:{backgroundColor:colors.ink,borderColor:colors.ink},text:{fontFamily:fonts.medium,fontSize:14,color:colors.ink},activeText:{fontFamily:fonts.semibold,color:colors.surface}});
