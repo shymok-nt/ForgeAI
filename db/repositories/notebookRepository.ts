@@ -50,5 +50,6 @@ export const notebookRepository={
    });return newId;
   }catch(e){deleteCoverFile(newPath);throw e}
  },
+ async moveToFolder(id:string,folderId:string|null){const db=await getDatabase();await db.runAsync('UPDATE notebooks SET folder_id=? WHERE id=?',folderId,id)},
  async toggleFavorite(id:string){const db=await getDatabase();await db.runAsync('UPDATE notebooks SET favorite=CASE favorite WHEN 1 THEN 0 ELSE 1 END,updated_at=? WHERE id=?',now(),id);}
 };
