@@ -11,8 +11,8 @@ export function NotebookCover({notebook,width=160}:{notebook:CoverData;width?:nu
  const foreground=light?colors.ink:colors.surface;
  return <View style={[styles.shadow,{width,height}]}>
   <View style={[styles.cover,{backgroundColor:notebook.coverType==='color'?colors.ink:notebook.coverColor}]}>
-   {notebook.coverType==='image'&&notebook.coverImageUri&&<Image source={{uri:notebook.coverImageUri}} resizeMode="cover" style={StyleSheet.absoluteFillObject}/>}
-   <LinearGradient pointerEvents="none" colors={notebook.coverType==='image'?['#FFFFFF10','#00000008','#00000050']:['#FFFFFF16','#FFFFFF02','#00000010']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFillObject}/>
+   {notebook.coverType==='image'&&notebook.coverImageUri&&<Image source={{uri:notebook.coverImageUri}} resizeMode="cover" style={StyleSheet.absoluteFill}/>}
+   <LinearGradient pointerEvents="none" colors={notebook.coverType==='image'?['#FFFFFF10','#00000008','#00000050']:['#FFFFFF16','#FFFFFF02','#00000010']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/>
    <View style={[styles.spine,{width:Math.max(8,width*0.0875),backgroundColor:notebook.coverType==='color'?darken(notebook.coverColor):'#151525B8'}]}>
     {[0,1,2,3].map(i=><View key={i} style={[styles.stitch,{width:Math.max(3,width*0.03),height:Math.max(3,width*0.03)}]}/>)}
    </View>
