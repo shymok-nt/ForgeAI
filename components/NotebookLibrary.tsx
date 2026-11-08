@@ -1,0 +1,40 @@
+import { useMemo,useState } from 'react';
+import { Alert,FlatList,Modal,Pressable,SafeAreaView,StyleSheet,Text,View,useWindowDimensions } from 'react-native';
+import { router } from 'expo-router';
+import { BookOpen,MoreHorizontal,Plus,Search } from 'lucide-react-native';
+import { NotebookCard } from '@/components/NotebookCard';
+import { EmptyState } from '@/components/EmptyState';
+import { FolderChips } from '@/components/FolderChips';
+import { useNotebookStore } from '@/store/notebookStore';
+import { sortNotebooks } from '@/utils/notebook';
+import { colors } from '@/theme/colors';
+import { fonts } from '@/theme/fonts';
+import type { Notebook,SortBy,ViewMode } from '@/types/notebook';
+const sorts:{value:SortBy;label:string}[]=[{value:'updated',label:'Son düzenlenen'},{value:'title',label:'Ada göre'},{value:'created',label:'Oluşturma tarihi'}];
+export function NotebookLibrary({favorites=false}:{favorites?:boolean}){
+ const all=useNotebookStore(s=>s.notebooks),folder=useNotebookStore(s=>s.selectedFolder),setFolder=useNotebookStore(s=>s.setSelectedFolder),sortBy=useNotebookStore(s=>s.sortBy),setSortBy=useNotebookStore(s=>s.setSortBy),viewMode=useNotebookStore(s=>s.viewMode),setViewMode=useNotebookStore(s=>s.setViewMode);
+ const toggle=useNotebookStore(s=>s.toggleFavorite),duplicate=useNotebookStore(s=>s.duplicateNotebook),remove=useNotebookStore(s=>s.deleteNotebook);
+ const [menu,setMenu]=useState(false),[selected,setSelected]=useState<Notebook|null>(null);
+ const {width}=useWindowDimensions();const columns=viewMode==='grid'?Math.max(2,Math.min(4,Math.floor((width-40+20)/170))):1;const cardWidth=(width-40-(columns-1)*20)/columns;
+ const data=useMemo(()=>sortNotebooks(all.filter(n=>(!favorites||n.favorite)&&(favorites||folder==='Tümü'||n.folder===folder)),sortBy),[all,folder,favorites,sortBy]);
+ const open=(id:string)=>router.push({pathname:'/note/[id]',params:{id}});
+ const editor=(id?:string)=>router.push({pathname:'/notebook-editor',params:id?{id}:{}});
+ const deleteSelected=(n:Notebook)=>{setSelected(null);Alert.alert('Defteri sil','Bu defter silinsin mi? Bu işlem geri alınamaz.',[{text:'Vazgeç',style:'cancel'},{text:'Sil',style:'destructive',onPress:()=>remove(n.id)}]);};
+ return <SafeAreaView style={styles.safe}><View style={styles.body}>
+ <View style={styles.top}><Text style={styles.brand}>{favorites?'Favoriler':'Notex'}</Text><View style={styles.topActions}>{!favorites&&<Pressable accessibilityRole="button" accessibilityLabel="Ara" style={styles.round}><Search size={22} color={colors.ink}/></Pressable>}<Pressable accessibilityRole="button" accessibilityLabel="Sırala ve görünüm" style={styles.round} onPress={()=>setMenu(true)}><MoreHorizontal size={22} color={colors.ink}/></Pressable></View></View>
+ {!favorites&&<View style={styles.filters}><FolderChips value={folder} onChange={setFolder}/></View>}
+ <View style={styles.section}><Text style={styles.sectionTitle}>{favorites?'Favori defterler':'Defterlerim'}</Text><Text style={styles.count}>{data.length} defter</Text></View>
+ <FlatList key={`${columns}-${viewMode}`} style={{flex:1}} data={data} numColumns={columns} keyExtractor={n=>n.id} columnWrapperStyle={columns>1?{gap:20}:undefined} contentContainerStyle={data.length?{paddingBottom:120}:{flexGrow:1,paddingBottom:120,justifyContent:'center'}} renderItem={({item})=><View style={columns>1?{width:cardWidth,marginBottom:24}:{flex:1}}><NotebookCard notebook={item} width={cardWidth} viewMode={viewMode} onOpen={()=>open(item.id)} onOptions={()=>setSelected(item)}/></View>} ListEmptyComponent={<EmptyState/>}/>
+ {!favorites&&<Pressable accessibilityRole="button" accessibilityLabel="Yeni defter" onPress={()=>editor()} style={styles.fab}><Plus size={28} strokeWidth={3} color={colors.surface}/></Pressable>}
+ </View>
+ <Modal visible={menu} transparent animationType="fade" onRequestClose={()=>setMenu(false)}><Pressable style={styles.overlay} onPress={()=>setMenu(false)}><View style={styles.sheet}><Text style={styles.sheetTitle}>Sırala</Text>{sorts.map(item=><Pressable key={item.value} accessibilityRole="button" accessibilityLabel={item.label} style={styles.option} onPress={()=>{setSortBy(item.value);setMenu(false)}}><Text style={[styles.optionText,sortBy===item.value&&styles.active]}>{item.label}{sortBy===item.value?' ✓':''}</Text></Pressable>)}<Text style={styles.sheetTitle}>Görünüm</Text>{(['grid','list'] as ViewMode[]).map(v=><Pressable key={v} accessibilityRole="button" accessibilityLabel={v==='grid'?'Izgara görünümü':'Liste görünümü'} style={styles.option} onPress={()=>{setViewMode(v);setMenu(false)}}><Text style={[styles.optionText,viewMode===v&&styles.active]}>{v==='grid'?'Izgara':'Liste'}{viewMode===v?' ✓':''}</Text></Pressable>)}<Pressable accessibilityRole="button" accessibilityLabel="Menüyü kapat" style={styles.option} onPress={()=>setMenu(false)}><Text style={styles.optionText}>Kapat</Text></Pressable></View></Pressable></Modal>
+ <Modal visible={!!selected} transparent animationType="fade" onRequestClose={()=>setSelected(null)}><Pressable style={styles.overlay} onPress={()=>setSelected(null)}><View style={styles.sheet}><Text numberOfLines={1} style={styles.sheetTitle}>{selected?.title}</Text>
+ <Pressable accessibilityRole="button" accessibilityLabel="Defteri düzenle" style={styles.option} onPress={()=>{const id=selected?.id;setSelected(null);if(id)editor(id)}}><Text style={styles.optionText}>Defteri düzenle</Text></Pressable>
+ <Pressable accessibilityRole="button" accessibilityLabel={selected?.favorite?'Favoriden çıkar':'Favorilere ekle'} style={styles.option} onPress={()=>{if(selected)toggle(selected.id);setSelected(null)}}><Text style={styles.optionText}>{selected?.favorite?'Favoriden çıkar':'Favorilere ekle'}</Text></Pressable>
+ <Pressable accessibilityRole="button" accessibilityLabel="Defteri çoğalt" style={styles.option} onPress={()=>{if(selected)duplicate(selected.id);setSelected(null)}}><Text style={styles.optionText}>Çoğalt</Text></Pressable>
+ <Pressable accessibilityRole="button" accessibilityLabel="Defteri sil" style={styles.option} onPress={()=>{if(selected)deleteSelected(selected)}}><Text style={[styles.optionText,{color:colors.coral}]}>Sil</Text></Pressable>
+ <Pressable accessibilityRole="button" accessibilityLabel="Kapat" style={styles.option} onPress={()=>setSelected(null)}><Text style={styles.optionText}>Vazgeç</Text></Pressable>
+ </View></Pressable></Modal>
+ </SafeAreaView>
+}
+const styles=StyleSheet.create({safe:{flex:1,backgroundColor:colors.background},body:{flex:1,paddingHorizontal:20},top:{marginTop:18,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},brand:{fontFamily:fonts.heading,fontSize:32,letterSpacing:-0.64,color:colors.ink},topActions:{flexDirection:'row',gap:10},round:{width:44,height:44,borderRadius:22,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',shadowColor:colors.ink,shadowOpacity:0.06,shadowRadius:6,shadowOffset:{width:0,height:2},elevation:2},filters:{marginTop:20},section:{marginTop:24,marginBottom:18,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},sectionTitle:{fontFamily:fonts.heading,fontSize:20,color:colors.ink},count:{fontFamily:fonts.body,fontSize:13,color:colors.muted},fab:{position:'absolute',bottom:20,right:20,width:60,height:60,borderRadius:20,backgroundColor:colors.accent,alignItems:'center',justifyContent:'center',shadowColor:colors.accent,shadowOffset:{width:0,height:5},shadowOpacity:0.28,shadowRadius:10,elevation:7},overlay:{flex:1,justifyContent:'flex-end',backgroundColor:'#0007'},sheet:{backgroundColor:colors.surface,borderTopLeftRadius:24,borderTopRightRadius:24,paddingHorizontal:24,paddingTop:22,paddingBottom:36},sheetTitle:{fontFamily:fonts.heading,fontSize:20,color:colors.ink,marginTop:10,marginBottom:8},option:{minHeight:48,justifyContent:'center',borderBottomWidth:1,borderBottomColor:colors.divider},optionText:{fontFamily:fonts.medium,fontSize:16,color:colors.ink},active:{color:colors.accent,fontFamily:fonts.semibold}});
