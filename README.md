@@ -17,7 +17,7 @@ Uygulama boş başlar. **+** düğmesi tam ekran **Yeni defter** düzenleyicisin
 
 Kütüphanede **Tümü / Ders / İş / Kişisel** filtreleri, **Sırala/Görünüm** menüsünde son düzenlenen / ada göre / oluşturma tarihi ve ızgara / liste seçenekleri vardır. Karta uzun basarak düzenleme, favorilere ekleme/çıkarma, çoğaltma veya onaylı silme yapılır. **Favoriler** sekmesi aynı kapakları gösterir. **Klasörler** sekmesi şimdilik yer tutucudur.
 
-Galeri kapakları `expo-file-system` ile uygulamanın `documentDirectory/covers/` klasörüne kopyalanır. **Defterlerin kendisi şimdilik Zustand belleğindedir**: uygulama yeniden başlatıldığında liste sıfırlanır. SQLite, canvas, arama ve koyu tema sonraki görevlerde eklenecek.
+Galeri kapakları `expo-file-system` ile uygulamanın `documentDirectory/covers/` klasörüne kopyalanır. **Defterler ve sayfalar SQLite'a kaydedilir; Zustand bellek önbelleği olarak kullanılır.** Canvas, arama ve koyu tema sonraki görevlerde eklenecek.
 
 ## Yapı
 
