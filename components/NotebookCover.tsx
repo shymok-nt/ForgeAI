@@ -1,0 +1,25 @@
+import { Image, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Star } from 'lucide-react-native';
+import { colors } from '@/theme/colors';
+import { fonts } from '@/theme/fonts';
+import { darken, isLightCover } from '@/theme/covers';
+import type { Notebook, NotebookDraft } from '@/types/notebook';
+type CoverData=Pick<NotebookDraft,'title'|'coverType'|'coverColor'|'coverImageUri'|'showTitleOnCover'> & {favorite?:boolean};
+export function NotebookCover({notebook,width=160}:{notebook:CoverData;width?:number}){
+ const height=width*4/3,light=notebook.coverType==='color'&&isLightCover(notebook.coverColor);
+ const foreground=light?colors.ink:colors.surface;
+ return <View style={[styles.shadow,{width,height}]}>
+  <View style={[styles.cover,{backgroundColor:notebook.coverType==='color'?colors.ink:notebook.coverColor}]}>
+   {notebook.coverType==='image'&&notebook.coverImageUri&&<Image source={{uri:notebook.coverImageUri}} resizeMode="cover" style={StyleSheet.absoluteFillObject}/>}
+   <LinearGradient pointerEvents="none" colors={notebook.coverType==='image'?['#FFFFFF10','#00000008','#00000050']:['#FFFFFF16','#FFFFFF02','#00000010']} start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFillObject}/>
+   <View style={[styles.spine,{width:Math.max(8,width*0.0875),backgroundColor:notebook.coverType==='color'?darken(notebook.coverColor):'#151525B8'}]}>
+    {[0,1,2,3].map(i=><View key={i} style={[styles.stitch,{width:Math.max(3,width*0.03),height:Math.max(3,width*0.03)}]}/>)}
+   </View>
+   {notebook.showTitleOnCover&&<View style={[styles.label,{left:width*0.15,right:width*0.07,bottom:notebook.coverType==='image'?height*0.29:height*0.13,backgroundColor:notebook.coverType==='image'?'#00000070':light?'#FFFFFF9C':'#FFFFFF27'}]}><Text numberOfLines={3} style={{fontFamily:fonts.heading,fontSize:Math.max(9,width*0.1),textAlign:'center',color:foreground}}>{notebook.title}</Text></View>}
+   {notebook.favorite&&<View style={[styles.favorite,{top:Math.max(7,width*0.05),right:Math.max(7,width*0.05)}]}><Star size={Math.max(12,width*0.105)} color="#C68A00" fill={colors.highlight}/></View>}
+   <View style={styles.pageRight}/><View style={styles.pageBottom}/>
+  </View>
+ </View>
+}
+const styles=StyleSheet.create({shadow:{shadowColor:colors.ink,shadowOffset:{width:0,height:6},shadowRadius:12,shadowOpacity:0.18,elevation:6},cover:{flex:1,overflow:'hidden',borderTopLeftRadius:4,borderBottomLeftRadius:4,borderTopRightRadius:12,borderBottomRightRadius:12},spine:{position:'absolute',left:0,top:0,bottom:0,justifyContent:'space-evenly',alignItems:'center',borderRightWidth:1,borderRightColor:'#FFFFFF40'},stitch:{borderRadius:20,backgroundColor:'#FFFFFF7A'},label:{position:'absolute',paddingVertical:7,paddingHorizontal:4,borderRadius:6},favorite:{position:'absolute',backgroundColor:'#FFFFFFE8',width:26,height:26,borderRadius:13,alignItems:'center',justifyContent:'center'},pageRight:{position:'absolute',right:0,top:7,bottom:4,width:3,backgroundColor:'#F7F0DDCC'},pageBottom:{position:'absolute',left:12,right:4,bottom:0,height:3,backgroundColor:'#F4ECD8DD'}});
