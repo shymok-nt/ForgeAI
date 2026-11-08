@@ -1,1 +1,2 @@
-export { default } from '@/screens/NotesListScreen';
+import { NotebookLibrary } from '@/components/NotebookLibrary';
+export default function Home(){return <NotebookLibrary/>}
