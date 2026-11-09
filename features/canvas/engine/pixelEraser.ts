@@ -26,10 +26,8 @@ const shapeOutline=(e:Extract<Element,{type:'shape'}>):P[]|null=>{
  const top=Math.min(y,y+h),bottom=Math.max(y,y+h);
  const pt=(a:number,b:number):P=>[a,b,0.5];
  if(e.kind==='line')return [pt(x,y),pt(x+w,y+h)];
- if(e.kind==='arrow'){
-  // Arrowheads are separate paths, handled independently below.
-  return [pt(x,y),pt(x+w,y+h)];
- }
+ // Preserve arrowheads until multi-subpath clipping is supported.
+ if(e.kind==='arrow')return null;
  if(e.kind==='rect')return [pt(left,top),pt(right,top),pt(right,bottom),pt(left,bottom),pt(left,top)];
  if(e.kind==='triangle')return [pt(x+w/2,y),pt(x+w,y+h),pt(x,y+h),pt(x+w/2,y)];
  if(e.kind==='polygon'&&points&&points.length>=6){
