@@ -488,10 +488,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
  {tool==='select'&&selectedBounds&&!handoff&&<Group transform={selectionTransform}>
-  <Rect x={selectedBounds[0]-10} y={selectedBounds[1]-10} width={selectedBounds[2]-selectedBounds[0]+20} height={selectedBounds[3]-selectedBounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
-  {[[selectedBounds[0]-10,selectedBounds[1]-10],[selectedBounds[2]+10,selectedBounds[1]-10],[selectedBounds[0]-10,selectedBounds[3]+10],[selectedBounds[2]+10,selectedBounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
+  <Group origin={vec((selectedBounds[0]+selectedBounds[2])/2,(selectedBounds[1]+selectedBounds[3])/2)} transform={[{rotate:selectedRotation}]}>
+   <Rect x={selectedBounds[0]-10} y={selectedBounds[1]-10} width={selectedBounds[2]-selectedBounds[0]+20} height={selectedBounds[3]-selectedBounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
+   {[[selectedBounds[0]-10,selectedBounds[1]-10],[selectedBounds[2]+10,selectedBounds[1]-10],[selectedBounds[0]-10,selectedBounds[3]+10],[selectedBounds[2]+10,selectedBounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
+  </Group>
  </Group>}
-
  {tool==='select'&&handoff&&<Group transform={[
   {translateX:handoff.dx},{translateY:handoff.dy},
   {translateX:(handoff.bounds[0]+handoff.bounds[2])/2},
@@ -501,8 +502,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   {translateY:-(handoff.bounds[1]+handoff.bounds[3])/2}
  ]}>
   {handoff.elements.map(element=><StrokeLayer key={element.id} element={element}/>)}
-  <Rect x={handoff.bounds[0]-10} y={handoff.bounds[1]-10} width={handoff.bounds[2]-handoff.bounds[0]+20} height={handoff.bounds[3]-handoff.bounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
-  {[[handoff.bounds[0]-10,handoff.bounds[1]-10],[handoff.bounds[2]+10,handoff.bounds[1]-10],[handoff.bounds[0]-10,handoff.bounds[3]+10],[handoff.bounds[2]+10,handoff.bounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
+  <Group origin={vec((handoff.bounds[0]+handoff.bounds[2])/2,(handoff.bounds[1]+handoff.bounds[3])/2)} transform={[{rotate:handoff.rotation}]}>
+   <Rect x={handoff.bounds[0]-10} y={handoff.bounds[1]-10} width={handoff.bounds[2]-handoff.bounds[0]+20} height={handoff.bounds[3]-handoff.bounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
+   {[[handoff.bounds[0]-10,handoff.bounds[1]-10],[handoff.bounds[2]+10,handoff.bounds[1]-10],[handoff.bounds[0]-10,handoff.bounds[3]+10],[handoff.bounds[2]+10,handoff.bounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
+  </Group>
  </Group>}
  {tool!=='eraser'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
  {tool==='eraser'&&<Circle cx={cursorX} cy={cursorY} r={eraserRadius} color="#808080" opacity={cursorOpacity} style="stroke" strokeWidth={1.5}/>}
