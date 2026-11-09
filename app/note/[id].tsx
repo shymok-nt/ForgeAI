@@ -1,1 +1,1 @@
-export { default } from '@/screens/NoteScreen';
+export { default } from '@/features/canvas/components/NoteCanvasScreen';
