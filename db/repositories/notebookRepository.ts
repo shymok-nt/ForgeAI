@@ -35,7 +35,12 @@ export const notebookRepository={
  },
  async remove(id:string){
   const db=await getDatabase();const row=await this.getById(id);if(!row)return;
-  await withSafeTransaction(db,async tx=>{await tx.runAsync('DELETE FROM notebooks WHERE id=?',id)});
+  // Explicitly remove child pages, including their persisted drawing content.
+  // Some web SQLite implementations do not reliably enforce ON DELETE CASCADE.
+  await withSafeTransaction(db,async tx=>{
+   await tx.runAsync('DELETE FROM pages WHERE notebook_id=?',id);
+   await tx.runAsync('DELETE FROM notebooks WHERE id=?',id);
+  });
   if(row.cover_image_path){const used=await db.getFirstAsync<{n:number}>('SELECT COUNT(*) AS n FROM notebooks WHERE cover_image_path=?',row.cover_image_path);if(!used?.n)deleteCoverFile(row.cover_image_path);}
  },
  async duplicate(id:string){
