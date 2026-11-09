@@ -90,5 +90,5 @@ function CanvasPage({page,tool,brush,eraserSize,eraserMode,onController,onHistor
  const controller:CanvasController={back,forward,flush,canUndo:h.canUndo,canRedo:h.canRedo,error,saving,retry};
  useEffect(()=>{onController(controller)},[content,error,saving]);
  useEffect(()=>()=>{void flush();onController(null)},[]);
- return <DrawingCanvas content={content} template={page.template} paperColor={page.paperColor} tool={tool} brush={tool==='highlighter'?{...brush,width:brush.width*5,opacity:0.35}:brush} eraserSize={eraserSize} eraserMode={eraserMode} onChange={change} onDrawingActive={setDrawingActive} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={onSelectionChange} selectionAction={selectionAction}/>;
+ return <DrawingCanvas content={content} template={page.template} paperColor={page.paperColor} tool={tool} brush={tool==='highlighter'?{...brush,width:brush.width*5}:brush} eraserSize={eraserSize} eraserMode={eraserMode} onChange={change} onDrawingActive={setDrawingActive} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={onSelectionChange} selectionAction={selectionAction}/>;
 }
