@@ -140,6 +140,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const cornerMode=useSharedValue(0); // 0 undecided, 1 resize, 2 rotate
  const cornerStartPageX=useSharedValue(0),cornerStartPageY=useSharedValue(0);
  const gestureScale=useSharedValue(1),gestureAngle=useSharedValue(0);
+ const selectionGestureLive=useSharedValue(false);
  const gestureDX=useSharedValue(0),gestureDY=useSharedValue(0);
  const transformActive=useSharedValue(false),transformPending=useSharedValue(false);
  const [handoff,setHandoff]=useState<{elements:Element[];bounds:readonly [number,number,number,number];rotation:number;dx:number;dy:number;scale:number;angle:number}|null>(null);
@@ -183,7 +184,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const selectionBoundsValue=useSharedValue<readonly [number,number,number,number]|null>(null);
  useEffect(()=>{selectionBoundsValue.value=selectedBounds;},[selectedBounds]);
  const dragTransform=useDerivedValue(()=>[{translateX:dragX.value},{translateY:dragY.value}]);
- const selectionTransform=useDerivedValue(()=>[
+ const selectionTransform=useDerivedValue(()=>!selectionGestureLive.value&&handoffMatchesSelection?[]:[
   {translateX:dragX.value+gestureDX.value},
   {translateY:dragY.value+gestureDY.value},
   {translateX:gestureCenterX.value},
@@ -252,6 +253,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   dragX.value=0;dragY.value=0;dragPending.value=false;
   gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
   transformPending.value=false;
+  selectionGestureLive.value=false;
  },[handoff]);
  // Keep the committed geometry mounted as the selected shape's baseline.
  // Removing the handoff after React's commit caused a second Skia scene
@@ -365,7 +367,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
     const localX=cx+(p[0]-cx)*cos+(p[1]-cy)*sin;
     const localY=cy-(p[0]-cx)*sin+(p[1]-cy)*cos;
     if(localX>=b[0]-hitSlop&&localX<=b[2]+hitSlop&&localY>=b[1]-hitSlop&&localY<=b[3]+hitSlop){
-    draggingSelection.value=true;dragX.value=0;dragY.value=0;
+    draggingSelection.value=true;selectionGestureLive.value=true;dragX.value=0;dragY.value=0;
     samples.value=[];drawing.value=false;draft.value='';
     return;
    }
@@ -515,7 +517,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
- {tool==='select'&&(handoffBounds||selectedBounds)&&<Group transform={handoffMatchesSelection?[]:selectionTransform}>
+ {tool==='select'&&(handoffBounds||selectedBounds)&&<Group transform={selectionTransform}>
   {(handoffMatchesSelection?handoffElements:selectedElements).map(element=><StrokeLayer key={element.id} element={element}/>)}
   {(()=>{
    const bounds=handoffBounds??selectedBounds!;
