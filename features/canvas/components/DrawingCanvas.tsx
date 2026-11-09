@@ -2,7 +2,7 @@ import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState
 import {View,PixelRatio,type LayoutChangeEvent} from 'react-native';
 import {Canvas,Group,Path,Rect,Line,Circle,vec} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector} from 'react-native-gesture-handler';
-import {useDerivedValue,useSharedValue,runOnJS,type SharedValue} from 'react-native-reanimated';
+import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement} from '@/features/canvas/types';
 import {makeStroke,strokePath} from '@/features/canvas/engine/geometry';
@@ -77,15 +77,14 @@ const StaticPaper=memo(function StaticPaper({template,paperColor,pageHeight,fitW
   {dots.map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={lineW*1.2} color="#C4CCDD"/>)}
  </>;
 });
-const StrokeLayer=memo(function StrokeLayer({element,previewScale}:{element:Element;previewScale?:SharedValue<number>}){
+const StrokeLayer=memo(function StrokeLayer({element}:{element:Element}){
  const path=useMemo(()=>cachedPath(element),[element]);
- const stableStrokeWidth=useDerivedValue(()=>element.type==='shape'?element.stroke.width/Math.max(0.15,previewScale?.value??1):1);
  if(element.type==='shape'){
   const {x,y,w,h,rotation}=element.params;
   const center=vec(x+w/2,y+h/2);
   return <Group origin={center} transform={[{rotate:rotation}]}>
    {element.fill&&<Path path={path} color={element.fill.color} opacity={element.fill.opacity} style="fill"/>}
-   <Path path={path} color={element.stroke.color} opacity={element.stroke.opacity} style="stroke" strokeWidth={previewScale?stableStrokeWidth:element.stroke.width}/>
+   <Path path={path} color={element.stroke.color} opacity={element.stroke.opacity} style="stroke" strokeWidth={element.stroke.width}/>
   </Group>;
  }
  return <Path path={path} color={element.color} opacity={element.opacity} blendMode={element.tool==='highlighter'?'multiply':'srcOver'} {...(element.renderMode==='centerline'?{style:'stroke' as const,strokeWidth:element.width,strokeCap:'round' as const,strokeJoin:'round' as const}:{})}/>;
@@ -130,6 +129,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const gestureScale=useSharedValue(1),gestureAngle=useSharedValue(0);
  const gestureDX=useSharedValue(0),gestureDY=useSharedValue(0);
  const transformActive=useSharedValue(false),transformPending=useSharedValue(false);
+ const selectionHandoffOpacity=useSharedValue(1);
  const rotateActive=useSharedValue(false),pinchActive=useSharedValue(false);
  const gestureFocalX=useSharedValue(0),gestureFocalY=useSharedValue(0);
  const gestureCenterX=useSharedValue(0),gestureCenterY=useSharedValue(0);
@@ -142,7 +142,6 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const selectionBoundsValue=useSharedValue<readonly [number,number,number,number]|null>(null);
  useEffect(()=>{selectionBoundsValue.value=selectedBounds;},[selectedBounds]);
  const dragTransform=useDerivedValue(()=>[{translateX:dragX.value},{translateY:dragY.value}]);
- const previewStrokeScale=useDerivedValue(()=>gestureScale.value);
  const selectionTransform=useDerivedValue(()=>[
   {translateX:dragX.value+gestureDX.value},
   {translateY:dragY.value+gestureDY.value},
@@ -191,12 +190,15 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    return out;
   });
   transformPending.value=true;
+  selectionHandoffOpacity.value=0;
   onChange(withHeight(next));
  };
  useLayoutEffect(()=>{
   if(transformPending.value){
    gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
    transformPending.value=false;
+   // New geometry and the identity transform must reach Skia before it is visible.
+   requestAnimationFrame(()=>{selectionHandoffOpacity.value=1});
   }
  },[content]);
  // Keep the rendered preview in place until React has committed the new geometry.
@@ -442,10 +444,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
-  {tool==='select'&&selectedElements.length>0&&<Group transform={selectionTransform}>{selectedElements.map(element=><StrokeLayer key={element.id} element={element} previewScale={previewStrokeScale}/>)}</Group>}
+  {tool==='select'&&selectedElements.length>0&&<Group transform={selectionTransform} opacity={selectionHandoffOpacity}>{selectedElements.map(element=><StrokeLayer key={element.id} element={element}/>)}</Group>}
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
- {tool==='select'&&selectedBounds&&<Group transform={selectionTransform}>
+ {tool==='select'&&selectedBounds&&<Group transform={selectionTransform} opacity={selectionHandoffOpacity}>
   <Rect x={selectedBounds[0]-10} y={selectedBounds[1]-10} width={selectedBounds[2]-selectedBounds[0]+20} height={selectedBounds[3]-selectedBounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
   {[[selectedBounds[0]-10,selectedBounds[1]-10],[selectedBounds[2]+10,selectedBounds[1]-10],[selectedBounds[0]-10,selectedBounds[3]+10],[selectedBounds[2]+10,selectedBounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
  </Group>}
