@@ -508,6 +508,9 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
     const dx=gestureDX.value,dy=gestureDY.value,scale=gestureScale.value,angle=gestureAngle.value;
     transformActive.value=false;
     if(Math.abs(dx)+Math.abs(dy)+Math.abs(scale-1)+Math.abs(angle)>0.0001){
+     committedDX.value+=dx;committedDY.value+=dy;
+     committedScale.value*=scale;committedAngle.value+=angle;
+     gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
      runOnJS(commitGesture)(dx,dy,scale,angle);
     }
     else {gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0}
