@@ -379,17 +379,21 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
      return()=>{cancelAnimationFrame(r1);cancelAnimationFrame(r2)};
    },[content]);
  const imageDragging=useSharedValue(false),imageDX=useSharedValue(0),imageDY=useSharedValue(0);
+ const imagePinching=useSharedValue(false),imageScale=useSharedValue(1),imageAngle=useSharedValue(0),imageRotateActive=useSharedValue(false);
+ const imageFocalX=useSharedValue(0),imageFocalY=useSharedValue(0),imageFocalDX=useSharedValue(0),imageFocalDY=useSharedValue(0);
  const imageBounds=useSharedValue<[number,number,number,number]|null>(null);
  useEffect(()=>{const i=(content.images??[]).find(x=>x.id===imageId);imageBounds.value=i?[i.x,i.y,i.x+i.width,i.y+i.height]:null},[imageId,content.images]);
- const imageTransform=useDerivedValue(()=>[{translateX:imageDX.value},{translateY:imageDY.value}]);
+ const imageTransform=useDerivedValue(()=>{const b=imageBounds.value,cx=b?(b[0]+b[2])/2:0,cy=b?(b[1]+b[3])/2:0;return [{translateX:imageDX.value+imageFocalDX.value},{translateY:imageDY.value+imageFocalDY.value},{translateX:cx},{translateY:cy},{rotate:imageAngle.value},{scale:imageScale.value},{translateX:-cx},{translateY:-cy}]});
+ const commitImagePinch=(dx:number,dy:number,scale:number,angle:number)=>{const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).map(i=>{if(i.id!==id)return i;const w=Math.max(40,i.width*scale),h=Math.max(40,i.height*scale);return {...i,x:i.x+(i.width-w)/2+dx,y:i.y+(i.height-h)/2+dy,width:w,height:h,rotation:(i.rotation??0)+angle}})})};
+ const finishImagePinch=()=>{'worklet';const dx=imageFocalDX.value,dy=imageFocalDY.value,scale=imageScale.value,angle=imageAngle.value;imagePinching.value=false;imageFocalDX.value=0;imageFocalDY.value=0;imageScale.value=1;imageAngle.value=0;if(Math.abs(dx)+Math.abs(dy)+Math.abs(scale-1)+Math.abs(angle)>0.0001)runOnJS(commitImagePinch)(dx,dy,scale,angle)};
  const commitImageMove=(dx:number,dy:number)=>{const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).map(i=>i.id===id?{...i,x:i.x+dx,y:i.y+dy}:i)})};
  const pan=Gesture.Pan().minDistance(0).onTouchesDown(e=>{
-  if(e.allTouches.length>1){blocked.value=true;samples.value=[];draft.value='';drawing.value=false}
+  if(e.allTouches.length>1){blocked.value=true;imageDragging.value=false;imageDX.value=0;imageDY.value=0;samples.value=[];draft.value='';drawing.value=false}
  }).onBegin(e=>{
   if(blocked.value||e.numberOfPointers!==1)return;
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
   if(tool==='hand'){baseX.value=offsetX.value;baseY.value=offsetY.value;return}
-  if(tool==='select'&&imageBounds.value){const p=pagePoint(e.x,e.y),b=imageBounds.value;if(p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3]){imageDragging.value=true;imageDX.value=0;imageDY.value=0;return;}}
+  if(imageBounds.value){const p=pagePoint(e.x,e.y),b=imageBounds.value;if(p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3]){imageDragging.value=true;imageDX.value=0;imageDY.value=0;return;}}
   // Drag an already selected element immediately; don't wait for a long press.
   // The previous zero-distance Pan gesture prevented LongPress from reliably activating.
   if(tool==='select'&&selectionBoundsValue.value){
@@ -491,7 +495,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
   if(tool==='eraser'){cursorX.value=p[0];cursorY.value=p[1];cursorOn.value=true}
  }).onEnd(()=>{
-  if(imageDragging.value){const dx=imageDX.value,dy=imageDY.value;imageDragging.value=false;imageDX.value=0;imageDY.value=0;if(Math.hypot(dx,dy)>0.1)runOnJS(commitImageMove)(dx,dy);return;}
+  if(imageDragging.value){const dx=imageDX.value,dy=imageDY.value;imageDragging.value=false;imageDX.value=0;imageDY.value=0;if(!imagePinching.value&&Math.hypot(dx,dy)>0.1)runOnJS(commitImageMove)(dx,dy);return;}
   if(cornerActive.value){
    const scale=gestureScale.value,angle=gestureAngle.value;
    cornerActive.value=false;cornerMode.value=0;
@@ -581,7 +585,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
  }).runOnJS(false);
  const singleTap=Gesture.Tap().numberOfTaps(1).maxDuration(250).maxDistance(12).onEnd(e=>{
-  if(tool==='select'&&!blocked.value){const p=pagePoint(e.x,e.y);runOnJS(selectAt)(p[0],p[1]);}
+  if(!blocked.value){const p=pagePoint(e.x,e.y);runOnJS(selectAt)(p[0],p[1]);}
  }).runOnJS(false);
  const gestures=Gesture.Simultaneous(pan,pinch,rotation,singleTap);
 
