@@ -83,12 +83,12 @@ export default function NoteCanvasScreen(){
 function CanvasPage({page,tool,brush,eraserSize,eraserMode,onController,onHistory,onDrawStart,shapeKind,shapeFill,onSelectionChange,selectionAction}:{page:Page;tool:Tool;brush:Brush;eraserSize:number;eraserMode:'pixel'|'stroke';onController:(value:CanvasController|null)=>void;onHistory:()=>void;onDrawStart:()=>void;shapeKind:ShapeKind;shapeFill:boolean;onSelectionChange:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}}){
  useKeepAwake();const [content,setContent]=useState<PageContent>(()=>parseContent(page.content));
  const {error,saving,retry,flush,setDrawingActive}=useAutosave(page.id,content);
- const change=(next:PageContent)=>{record(page.id,content);setContent(next);onHistory();onDrawStart()};
+ const change=(next:PageContent)=>{record(page.id,content);setContent(next);onHistory()};
  const back=()=>{const next=undo(page.id,content);if(next){setContent(next);onHistory()}};
  const forward=()=>{const next=redo(page.id,content);if(next){setContent(next);onHistory()}};
  const h=historyState(page.id);
  const controller:CanvasController={back,forward,flush,canUndo:h.canUndo,canRedo:h.canRedo,error,saving,retry};
- useEffect(()=>{onController(controller)},[content,error,saving]);
+ useEffect(()=>{onController(controller)},[error,saving,h.canUndo,h.canRedo]);
  useEffect(()=>()=>{void flush();onController(null)},[]);
  return <DrawingCanvas content={content} template={page.template} paperColor={page.paperColor} tool={tool} brush={tool==='highlighter'?{...brush,width:brush.width*5}:brush} eraserSize={eraserSize} eraserMode={eraserMode} onChange={change} onDrawingActive={setDrawingActive} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={onSelectionChange} selectionAction={selectionAction}/>;
 }
