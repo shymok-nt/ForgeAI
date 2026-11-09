@@ -383,6 +383,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const imageFocalX=useSharedValue(0),imageFocalY=useSharedValue(0),imageFocalDX=useSharedValue(0),imageFocalDY=useSharedValue(0);
  const imageBounds=useSharedValue<[number,number,number,number]|null>(null);
  const imageCorner=useSharedValue(false),imageCornerStart=useSharedValue(1),imageCornerX=useSharedValue(0),imageCornerY=useSharedValue(0);
+ const imageCornerAnchorX=useSharedValue(0),imageCornerAnchorY=useSharedValue(0),imageCornerSignX=useSharedValue(1),imageCornerSignY=useSharedValue(1);
  const imageCommittedX=useSharedValue(0),imageCommittedY=useSharedValue(0),imageCommittedScale=useSharedValue(1),imageCommittedAngle=useSharedValue(0);
  const imageHandoff=useRef(false);
  // Keep the selected image's rendered geometry frozen until the Skia preview
@@ -415,7 +416,27 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(blocked.value||e.numberOfPointers!==1)return;
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
   if(tool==='hand'){baseX.value=offsetX.value;baseY.value=offsetY.value;return}
-  if(imageBounds.value){const p=pagePoint(e.x,e.y),b=imageBounds.value;const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;const radius=24/(fitWidth*zoom.value);const cornerX=b[2],cornerY=b[3];if(Platform.OS==='web'&&Math.hypot(p[0]-cornerX,p[1]-cornerY)<radius){imageCorner.value=true;imageCornerStart.value=Math.max(1,Math.hypot(p[0]-cx,p[1]-cy));imageCornerX.value=cx;imageCornerY.value=cy;imageScale.value=1;return;}if(p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3]){imageDragging.value=true;imageDX.value=0;imageDY.value=0;return;}}
+  if(imageBounds.value){const p=pagePoint(e.x,e.y),bounds=imageBounds.value;
+   const cx=(bounds[0]+bounds[2])/2,cy=(bounds[1]+bounds[3])/2;
+   const angle=imageIdRef.current?(paintedImageRef.current?.rotation??0):0;
+   const cos=Math.cos(angle),sin=Math.sin(angle),dx=p[0]-cx,dy=p[1]-cy;
+   const lx=cx+dx*cos+dy*sin,ly=cy-dx*sin+dy*cos;
+   const radius=24/(fitWidth*zoom.value);
+   if(Platform.OS==='web'){
+    const corners:[[number,number],[number,number],[number,number],[number,number]]=[[bounds[0],bounds[1]],[bounds[2],bounds[1]],[bounds[0],bounds[3]],[bounds[2],bounds[3]]];
+    for(const [hx,hy] of corners){
+     if(Math.hypot(lx-hx,ly-hy)>radius)continue;
+     const anchorX=hx===bounds[0]?bounds[2]:bounds[0],anchorY=hy===bounds[1]?bounds[3]:bounds[1];
+     imageCorner.value=true;imageCornerAnchorX.value=anchorX;imageCornerAnchorY.value=anchorY;
+     imageCornerSignX.value=hx===bounds[0]?-1:1;imageCornerSignY.value=hy===bounds[1]?-1:1;
+     imageCornerStart.value=Math.max(1,Math.hypot(hx-anchorX,hy-anchorY));
+     imageCornerX.value=hx;imageCornerY.value=hy;imageScale.value=1;
+     samples.value=[];drawing.value=false;draft.value='';blocked.value=false;
+     return;
+    }
+   }
+   if(lx>=bounds[0]&&lx<=bounds[2]&&ly>=bounds[1]&&ly<=bounds[3]){imageDragging.value=true;imageDX.value=0;imageDY.value=0;return;}
+  }
   // Drag an already selected element immediately; don't wait for a long press.
   // The previous zero-distance Pan gesture prevented LongPress from reliably activating.
   if(tool==='select'&&selectionBoundsValue.value){
@@ -467,7 +488,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
  }).onUpdate(e=>{
   if(blocked.value||e.numberOfPointers!==1)return;
-  if(imageCorner.value){const p=pagePoint(e.x,e.y);imageScale.value=Math.max(0.15,Math.min(8,Math.hypot(p[0]-imageCornerX.value,p[1]-imageCornerY.value)/imageCornerStart.value));return;}
+  if(imageCorner.value){const p=pagePoint(e.x,e.y),b=imageBounds.value;if(!b)return;const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;const a=paintedImageRef.current?.rotation??0,cos=Math.cos(a),sin=Math.sin(a),dx=p[0]-cx,dy=p[1]-cy;const lx=cx+dx*cos+dy*sin,ly=cy-dx*sin+dy*cos;const vx=lx-imageCornerAnchorX.value,vy=ly-imageCornerAnchorY.value;const sx=imageCornerX.value-imageCornerAnchorX.value,sy=imageCornerY.value-imageCornerAnchorY.value;imageScale.value=Math.max(0.15,Math.min(8,(vx*sx+vy*sy)/Math.max(1,sx*sx+sy*sy)));return;}
   if(imageDragging.value){imageDX.value=e.translationX/(fitWidth*zoom.value);imageDY.value=e.translationY/(fitWidth*zoom.value);return}
   if(tool==='hand'){const [x,y]=clamp(zoom.value,baseX.value+e.translationX,baseY.value+e.translationY);offsetX.value=x;offsetY.value=y;return}
   if(cornerActive.value){
