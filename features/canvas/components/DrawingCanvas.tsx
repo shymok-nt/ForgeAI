@@ -81,6 +81,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const pagePoint=(x:number,y:number):Sample=>{ 'worklet';return [(x-originX.value)/(fitWidth*zoom.value),(y-originY.value)/(fitWidth*zoom.value),0.5]};
  const endStroke=(points:Sample[])=>{if(!points.length)return;
  if(tool==='select'){
+  awaitingCommit.value=false;draft.value='';
   const poly=points.flatMap(p=>[p[0],p[1]]);
   const ids=lassoSelect(content.elements,poly);
   if(!ids.length&&points.length<=3){const p=points[0];const hit=content.elements.filter(e=>p[0]>=e.bbox[0]-12&&p[0]<=e.bbox[2]+12&&p[1]>=e.bbox[1]-12&&p[1]<=e.bbox[3]+12).at(-1);if(hit)ids.push(hit.id)}
@@ -91,7 +92,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const shape=makeShape(shapeKind,first[0],first[1],w,h,brush.color,brush.width,brush.opacity,shapeFill);shape.z=content.elements.length;
   onChange({v:2,elements:[...content.elements,shape]});return;
  }
- if(tool==='eraser'){const next=pixelErase(content.elements,points,eraserSize/2,eraserMode==='stroke');if(next!==content.elements)onChange({v:2,elements:next});return}
+ if(tool==='eraser'){const next=pixelErase(content.elements,points,eraserSize/2,eraserMode==='stroke');if(next!==content.elements)onChange({v:2,elements:next});else awaitingCommit.value=false;return}
   const stroke=makeStroke(points,{tool:tool==='highlighter'?'highlighter':'pen',...brush},Crypto.randomUUID(),content.elements.length);
   onChange({v:2,elements:[...content.elements,stroke]});
  };
