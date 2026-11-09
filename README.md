@@ -89,3 +89,9 @@ Aktif çizgi, kalıcı içerik güncellenene kadar ekranda tutulur; tamamlanan �
 ## Çizgi kalınlığı ve titreme düzeltmesi
 
 Yeni kalem ve vurgulayıcı çizgileri `v:2` içinde isteğe bağlı `renderMode: 'centerline'` alanıyla kaydedilir. Aktif ve kalıcı çizim aynı nokta dizisini, çizgi kalınlığını, opaklığı, yuvarlak uçları ve vurgulayıcı karışım modunu kullanır. Yeni çizgilerin noktaları görünümü değiştirecek biçimde sadeleştirilmez. Eski v2 çizgilerinde alan bulunmadığı için önceki perfect-freehand görüntüsü korunur. Çizgi tamamlandığında geçici çizgi, kalıcı içerik React commit aşamasına ulaşana kadar tutulur ve layout aşamasında kaldırılır. Kalıcı çizgiler id bazlı memo bileşenlerde ve Skia path önbelleğinde saklanır; kâğıt şablonu da ayrı memo katmanıdır.
+
+## Kenardan kenara uzayan kâğıt (v2)
+
+Çizim alanında sayfa dışı çerçeve/gölge ve genişliğe sığdırma boşluğu yoktur. Kâğıt, çizim alanının genişliğine tam oturur; alt yüzen araç çubuğu kâğıdın üstünde kalır. Çizgili, kareli ve noktalı şablonlar mantıksal sayfa yüksekliği boyunca devam eder. `PageContent` içinde **opsiyonel `h`** (sayfa birimi) bulunur; alanı olmayan eski v2 kayıtlar 1414 birim veya ekrana sığan daha büyük yükseklikle açılır. Çizim aşağıya doğru ilerledikçe yükseklik, son çizimin alt sınırının 400 birim ötesine uzatılır ve aynı v2 içeriğiyle kaydedilir. El aracıyla dikey kaydırma ve iki parmakla kaydırma/yakınlaştırma kullanılabilir. Sayfa panelinde önizleme yüksekliği `h` ile orantılıdır (panel taşmasını önlemek için sınırlandırılmıştır).
+
+**Doğrulama durumu:** Bu bölümün cihaz üzerinde TypeScript, release FPS, farklı ekran oranları ve uzun sayfalarda bellek testleri henüz çalıştırılmadı. Raster SkSurface önbelleği, atomik çizgi geçişi ve canlı piksel silgi bu bölümde uygulanmış değildir; önceki teşhis belgesindeki performans hedefleri doğrulanmış sayılmaz.
