@@ -33,6 +33,9 @@ export default function NoteCanvasScreen(){
  const [moreOpen,setMoreOpen]=useState(false);const [panel,setPanel]=useState<'tool'|'palette'|null>(null),[sheet,setSheet]=useState(false),[focus,setFocus]=useState(false),[eraserSize,setEraserSize]=useState(24),[eraserMode,setEraserMode]=useState<'pixel'|'stroke'>('pixel');
  const [controller,setController]=useState<CanvasController|null>(null);
  const [imageRequest,setImageRequest]=useState<{uri:string;width:number;height:number;version:number}|null>(null);
+ const [selectedImageId,setSelectedImageId]=useState<string|null>(null);
+ const [imageAction,setImageAction]=useState<{kind:'grow'|'shrink'|'delete';version:number}>();
+ const editImage=(kind:'grow'|'shrink'|'delete')=>setImageAction({kind,version:Date.now()});
  const [shapeKind,setShapeKind]=useState<ShapeMode>('auto'),[shapeFill,setShapeFill]=useState(false),[ruler,setRuler]=useState(false);
  const [selectedElements,setSelectedElements]=useState<string[]>([]),[selectionAction,setSelectionAction]=useState<{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}>();
  const action=(kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color',value?:number,color?:string)=>setSelectionAction({kind,value,color,version:Date.now()});
@@ -42,7 +45,7 @@ export default function NoteCanvasScreen(){
  useEffect(()=>{let live=true;void settingsRepository.get('canvasToolSettings').then(raw=>{if(!raw||!live)return;try{const s=JSON.parse(raw) as {tool?:Tool;brush?:Brush;recent?:string[];eraserMode?:'pixel'|'stroke';eraserSize?:number};if(s.tool&&['pen','highlighter','eraser','hand'].includes(s.tool))setTool(s.tool);if(s.brush&&typeof s.brush.color==='string'&&typeof s.brush.width==='number'&&typeof s.brush.opacity==='number')setBrush(s.brush);if(Array.isArray(s.recent))setRecent(s.recent);if(s.eraserMode==='pixel'||s.eraserMode==='stroke')setEraserMode(s.eraserMode);if(typeof s.eraserSize==='number')setEraserSize(s.eraserSize)}catch{}}).catch(()=>{});return()=>{live=false}},[]);
  useEffect(()=>{void settingsRepository.set('canvasToolSettings',JSON.stringify({tool,brush,recent,eraserMode,eraserSize})).catch(()=>{})},[tool,brush,recent,eraserMode,eraserSize]);
  const selected=pages.find(p=>p.id===selectedId)??pages[0];const index=selected?pages.findIndex(p=>p.id===selected.id):0;
- const select=(pageId:string)=>{if(pageId===selected?.id)return;void controllerRef.current?.flush();setImageRequest(null);setSelectedId(pageId);setController(null);setPanel(null);setSheet(false)};
+ const select=(pageId:string)=>{if(pageId===selected?.id)return;void controllerRef.current?.flush();setImageRequest(null);setSelectedImageId(null);setSelectedId(pageId);setController(null);setPanel(null);setSheet(false)};
  const addPage=async()=>{await controllerRef.current?.flush();const count=pages.length;await add(index);const next=usePageStore.getState().pages;if(next.length>count)select(next[Math.min(index+1,next.length-1)].id)};
  const askRemove=(pageId:string)=>{if(pages.length<=1){Alert.alert('Son sayfa','Defterin son sayfası silinemez.');return}Alert.alert('Sayfayı sil','Bu sayfa silinsin mi?',[{text:'Vazgeç',style:'cancel'},{text:'Sil',style:'destructive',onPress:async()=>{await controllerRef.current?.flush();await remove(pageId);const next=usePageStore.getState().pages;if(pageId===selected?.id&&next.length)setSelectedId(next[Math.min(index,next.length-1)].id)}}])};
  const chooseTemplate=(pageId:string)=>{setTemplatePageId(pageId);};
@@ -101,12 +104,13 @@ export default function NoteCanvasScreen(){
  <View style={{flex:1,flexDirection:'row'}}>
  {tablet&&!focus&&<View style={{width:132,backgroundColor:colors.background,borderRightWidth:1,borderRightColor:colors.divider}}><CanvasPageStrip tablet pages={pages} selectedId={selected?.id} colors={colors} onSelect={select} onAdd={()=>void addPage()} onRemove={askRemove} onMove={(p,i)=>void move(p,i)} onActions={pageActions}/></View>}
  <View style={{flex:1,marginHorizontal:0,marginTop:0,marginBottom:0,borderRadius:0,overflow:'hidden'}}>
- {selected?<CanvasPage key={selected.id} page={selected} tool={tool} brush={brush} eraserSize={eraserSize} eraserMode={eraserMode} onController={setController} onHistory={()=>{}} onDrawStart={()=>setPanel(null)} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={setSelectedElements} selectionAction={selectionAction} imageRequest={imageRequest}/>:<Text style={{color:ink}}>Sayfalar yükleniyor…</Text>}
+ {selected?<CanvasPage key={selected.id} page={selected} tool={tool} brush={brush} eraserSize={eraserSize} eraserMode={eraserMode} onController={setController} onHistory={()=>{}} onDrawStart={()=>setPanel(null)} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={setSelectedElements} selectionAction={selectionAction} imageRequest={imageRequest} imageAction={imageAction} onImageSelectionChange={setSelectedImageId}/>:<Text style={{color:ink}}>Sayfalar yükleniyor…</Text>}
  </View>
  <View pointerEvents="none" style={{position:'absolute',bottom:tablet?22:110,right:24,backgroundColor:'#1B1B2FBB',borderRadius:20,paddingHorizontal:12,paddingVertical:7}}><Text style={{color:'#FFFFFF',fontSize:12}}>{index+1} / {pages.length}</Text></View>
  {focus&&<Pressable accessibilityRole="button" accessibilityLabel="Araç çubuklarını göster" onPress={()=>setFocus(false)} style={{position:'absolute',top:0,left:0,right:0,height:44,alignItems:'center',justifyContent:'center'}}><Eye color={colors.accent} size={20}/></Pressable>}
  {!tablet&&!focus&&<View style={{position:'absolute',bottom:28,left:12,right:12}}><CanvasToolbar tablet={false} tool={tool} colors={colors} onTool={chooseTool} onPages={()=>setSheet(true)} onImage={()=>void insertImage()}/></View>}
 
+ {selectedImageId&&<View style={{position:'absolute',top:12,alignSelf:'center',flexDirection:'row',gap:12,paddingHorizontal:12,paddingVertical:6,borderRadius:16,backgroundColor:colors.surfaceRaised,zIndex:30}}><Pressable accessibilityRole="button" accessibilityLabel="Resmi küçült" onPress={()=>editImage('shrink')} style={hit}><Minus color={ink} size={22}/></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Resmi büyüt" onPress={()=>editImage('grow')} style={hit}><Plus color={ink} size={22}/></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Resmi sil" onPress={()=>editImage('delete')} style={hit}><Trash2 color={colors.coral} size={22}/></Pressable></View>}
  {ruler&&<View pointerEvents="none" style={{position:'absolute',top:'45%',left:'15%',width:'70%',height:64,backgroundColor:colors.accent+'55',borderWidth:1,borderColor:colors.accent,borderRadius:6,justifyContent:'center',alignItems:'center'}}><Text style={{color:ink}}>0°   | | | | | | | | | | | |</Text></View>}
  {popover}
  </View>
@@ -138,7 +142,7 @@ export default function NoteCanvasScreen(){
  </View></View></Modal>
  </SafeAreaView>;
 }
-function CanvasPage({page,tool,brush,eraserSize,eraserMode,onController,onHistory,onDrawStart,shapeKind,shapeFill,onSelectionChange,selectionAction,imageRequest}:{page:Page;tool:Tool;brush:Brush;eraserSize:number;eraserMode:'pixel'|'stroke';onController:(value:CanvasController|null)=>void;onHistory:()=>void;onDrawStart:()=>void;shapeKind:ShapeMode;shapeFill:boolean;onSelectionChange:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number};imageRequest?:{uri:string;width:number;height:number;version:number}|null}){
+function CanvasPage({page,tool,brush,eraserSize,eraserMode,onController,onHistory,onDrawStart,shapeKind,shapeFill,onSelectionChange,selectionAction,imageRequest,imageAction,onImageSelectionChange}:{page:Page;tool:Tool;brush:Brush;eraserSize:number;eraserMode:'pixel'|'stroke';onController:(value:CanvasController|null)=>void;onHistory:()=>void;onDrawStart:()=>void;shapeKind:ShapeMode;shapeFill:boolean;onSelectionChange:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number};imageRequest?:{uri:string;width:number;height:number;version:number}|null;imageAction?:{kind:'grow'|'shrink'|'delete';version:number};onImageSelectionChange:(id:string|null)=>void}){
  useCanvasAwake();const [content,setContent]=useState<PageContent>(()=>parseContent(page.content));
  const {error,saving,retry,flush,setDrawingActive}=useAutosave(page.id,content);
  const change=(next:PageContent)=>{record(page.id,content);setContent(next);onHistory()};
@@ -149,5 +153,5 @@ function CanvasPage({page,tool,brush,eraserSize,eraserMode,onController,onHistor
  const controller:CanvasController={back,forward,flush,canUndo:h.canUndo,canRedo:h.canRedo,error,saving,retry};
  useEffect(()=>{onController(controller)},[error,saving,h.canUndo,h.canRedo]);
  useEffect(()=>()=>{void flush();onController(null)},[]);
- return <DrawingCanvas content={content} template={page.template} paperColor={page.paperColor} tool={tool} brush={tool==='highlighter'?{...brush,width:brush.width*5}:brush} eraserSize={eraserSize} eraserMode={eraserMode} onChange={change} onDrawingActive={setDrawingActive} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={onSelectionChange} selectionAction={selectionAction}/>;
+ return <DrawingCanvas content={content} template={page.template} paperColor={page.paperColor} tool={tool} brush={tool==='highlighter'?{...brush,width:brush.width*5}:brush} eraserSize={eraserSize} eraserMode={eraserMode} onChange={change} onDrawingActive={setDrawingActive} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={onSelectionChange} selectionAction={selectionAction} imageAction={imageAction} onImageSelectionChange={onImageSelectionChange}/>;
 }
