@@ -2,9 +2,10 @@
   "name": "notex",
   "version": "1.0.0",
   "private": true,
-  "main": "expo-router/entry",
+  "main": "index",
   "scripts": {
     "start": "expo start",
+    "postinstall": "setup-skia-web",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
