@@ -40,6 +40,7 @@ export const pageRepository={
    await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=?',now(),row.notebook_id);
   });
  },
+ async updateContent(pageId:string,content:string){const db=await getDatabase(),date=now();await db.withExclusiveTransactionAsync(async tx=>{await tx.runAsync('UPDATE pages SET content=?,updated_at=? WHERE id=?',content,date,pageId);await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=(SELECT notebook_id FROM pages WHERE id=?)',date,pageId)})},
  async updateTemplate(pageId:string,template:PageTemplate,paperColor:PaperColor){
   const db=await getDatabase(),date=now();await db.withExclusiveTransactionAsync(async tx=>{
    await tx.runAsync('UPDATE pages SET template=?,paper_color=?,updated_at=? WHERE id=?',template,paperColor,date,pageId);
