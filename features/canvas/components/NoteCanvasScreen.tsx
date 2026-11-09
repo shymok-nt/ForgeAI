@@ -27,7 +27,7 @@ export default function NoteCanvasScreen(){
  const notebook=useNotebookStore(s=>s.notebooks.find(n=>n.id===id));
  const pages=usePageStore(s=>s.pages),load=usePageStore(s=>s.load),add=usePageStore(s=>s.add),remove=usePageStore(s=>s.remove),move=usePageStore(s=>s.move),changeTemplate=usePageStore(s=>s.updateTemplate);
  const [selectedId,setSelectedId]=useState<string|null>(null),[tool,setTool]=useState<Tool>('pen'),[brush,setBrush]=useState<Brush>({color:'#1B1B2F',width:5,opacity:1});
- const [panel,setPanel]=useState<'tool'|'palette'|null>(null),[sheet,setSheet]=useState(false),[focus,setFocus]=useState(false),[eraserSize,setEraserSize]=useState(24),[eraserMode,setEraserMode]=useState<'pixel'|'stroke'>('pixel');
+ const [moreOpen,setMoreOpen]=useState(false);const [panel,setPanel]=useState<'tool'|'palette'|null>(null),[sheet,setSheet]=useState(false),[focus,setFocus]=useState(false),[eraserSize,setEraserSize]=useState(24),[eraserMode,setEraserMode]=useState<'pixel'|'stroke'>('pixel');
  const [controller,setController]=useState<CanvasController|null>(null);
  const [shapeKind,setShapeKind]=useState<ShapeMode>('auto'),[shapeFill,setShapeFill]=useState(false),[ruler,setRuler]=useState(false);
  const [selectedElements,setSelectedElements]=useState<string[]>([]),[selectionAction,setSelectionAction]=useState<{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}>();
@@ -43,7 +43,16 @@ export default function NoteCanvasScreen(){
  const askRemove=(pageId:string)=>{if(pages.length<=1){Alert.alert('Son sayfa','Defterin son sayfası silinemez.');return}Alert.alert('Sayfayı sil','Bu sayfa silinsin mi?',[{text:'Vazgeç',style:'cancel'},{text:'Sil',style:'destructive',onPress:async()=>{await controllerRef.current?.flush();await remove(pageId);const next=usePageStore.getState().pages;if(pageId===selected?.id&&next.length)setSelectedId(next[Math.min(index,next.length-1)].id)}}])};
  const chooseTemplate=(pageId:string)=>Alert.alert('Sayfa şablonu','Yeni şablonu seç',templates.map(t=>({text:t,onPress:()=>{const p=pages.find(x=>x.id===pageId);if(p)void changeTemplate(pageId,t,p.paperColor)}})).concat([{text:'Vazgeç' as PageTemplate,onPress:()=>{}}]));
  const pageActions=(pageId:string)=>Alert.alert('Sayfa işlemleri','İşlem seç',[{text:'Şablon',onPress:()=>chooseTemplate(pageId)},{text:'Yukarı taşı',onPress:()=>void move(pageId,Math.max(0,pages.findIndex(p=>p.id===pageId)-1))},{text:'Aşağı taşı',onPress:()=>void move(pageId,Math.min(pages.length-1,pages.findIndex(p=>p.id===pageId)+1))},{text:'Sil',style:'destructive',onPress:()=>askRemove(pageId)},{text:'Vazgeç',style:'cancel'}]);
- const more=()=>Alert.alert('Diğer','Sayfa işlemleri',[{text:'Şablonu değiştir',onPress:()=>selected&&chooseTemplate(selected.id)},{text:'Sayfa ekle',onPress:()=>void addPage()},{text:'Sayfalar',onPress:()=>setSheet(true)},{text:'Cetvel aç/kapat',onPress:()=>setRuler(v=>!v)},{text:'Odak modu',onPress:()=>setFocus(v=>!v)},{text:'Defteri düzenle',onPress:()=>router.push({pathname:'/notebook-editor',params:{id}})},{text:'Vazgeç',style:'cancel'}]);
+ const more=()=>{setPanel(null);setMoreOpen(true);};
+ const moreItems=[
+  {label:'Şablonu değiştir',onPress:()=>selected&&chooseTemplate(selected.id)},
+  {label:'Sayfa ekle',onPress:()=>void addPage()},
+  {label:'Sayfalar',onPress:()=>setSheet(true)},
+  {label:'Cetvel aç/kapat',onPress:()=>setRuler(v=>!v)},
+  {label:'Odak modu',onPress:()=>setFocus(v=>!v)},
+  {label:'Defteri düzenle',onPress:()=>router.push({pathname:'/notebook-editor',params:{id}})}
+ ];
+
  const chooseTool=(t:Tool)=>{if(tool===t)setPanel(p=>p==='tool'?null:'tool');else{setTool(t);setPanel(null)}};
  const chooseColor=(color:string)=>{setBrush(b=>({...b,color}));setRecent(r=>[color,...r.filter(x=>x!==color)].slice(0,8))};
  const ink=colors.ink,muted=colors.muted;const backdrop=scheme==='dark'?'#0B0B10':'#EEE9DF';
@@ -85,6 +94,14 @@ export default function NoteCanvasScreen(){
  {popover}
  </View>
  <Modal visible={sheet} transparent animationType="slide" onRequestClose={()=>setSheet(false)}><View style={{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay}}><View style={{backgroundColor:colors.surfaceRaised,borderTopLeftRadius:24,borderTopRightRadius:24,paddingBottom:28,maxHeight:height*0.65}}><View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingHorizontal:16,paddingTop:12}}><Text style={{fontFamily:fonts.heading,fontSize:20,color:ink}}>Sayfalar</Text>{control('Kapat',X,()=>setSheet(false))}</View><CanvasPageStrip tablet={false} pages={pages} selectedId={selected?.id} colors={colors} onSelect={select} onAdd={()=>void addPage()} onRemove={askRemove} onMove={(p,i)=>void move(p,i)} onActions={pageActions}/></View></View></Modal>
+ <Modal visible={moreOpen} transparent animationType="fade" onRequestClose={()=>setMoreOpen(false)}>
+ <View style={{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay}}>
+ <Pressable accessibilityRole="button" accessibilityLabel="Menüyü kapat" onPress={()=>setMoreOpen(false)} style={{position:'absolute',top:0,left:0,right:0,bottom:0}}/>
+ <View style={{backgroundColor:colors.surfaceRaised,borderTopLeftRadius:22,borderTopRightRadius:22,paddingHorizontal:20,paddingTop:16,paddingBottom:32}}>
+ <Text style={{fontFamily:fonts.heading,fontSize:19,color:ink,marginBottom:12}}>Diğer işlemler</Text>
+ {moreItems.map(item=><Pressable key={item.label} accessibilityRole="button" accessibilityLabel={item.label} onPress={()=>{setMoreOpen(false);item.onPress()}} style={{minHeight:52,justifyContent:'center',borderBottomWidth:1,borderBottomColor:colors.divider}}><Text style={{fontSize:16,color:ink}}>{item.label}</Text></Pressable>)}
+ <Pressable accessibilityRole="button" accessibilityLabel="Vazgeç" onPress={()=>setMoreOpen(false)} style={{minHeight:52,justifyContent:'center'}}><Text style={{fontSize:16,color:colors.accent}}>Vazgeç</Text></Pressable>
+ </View></View></Modal>
  </SafeAreaView>;
 }
 function CanvasPage({page,tool,brush,eraserSize,eraserMode,onController,onHistory,onDrawStart,shapeKind,shapeFill,onSelectionChange,selectionAction}:{page:Page;tool:Tool;brush:Brush;eraserSize:number;eraserMode:'pixel'|'stroke';onController:(value:CanvasController|null)=>void;onHistory:()=>void;onDrawStart:()=>void;shapeKind:ShapeMode;shapeFill:boolean;onSelectionChange:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}}){
