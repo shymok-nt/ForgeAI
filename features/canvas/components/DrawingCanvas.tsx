@@ -237,7 +237,13 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   {translateX:-paintedCenterX},
   {translateY:-paintedCenterY}
  ]);
+ const deleteSelectedImage=()=>{const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).filter(i=>i.id!==id)});setImageId(null);onImageSelectionChange?.(null);setDisplayImageId(null);paintedImageIdRef.current=null;};
+ const imageDeleteHit=(x:number,y:number)=>{const id=imageIdRef.current;if(!id)return false;const i=(content.images??[]).find(item=>item.id===id);if(!i)return false;const cx=i.x+i.width/2,cy=i.y+i.height/2,a=i.rotation??0;
+ const hx=i.x+i.width-12,hy=i.y+12,dx=hx-cx,dy=hy-cy;
+ const rx=cx+dx*Math.cos(a)-dy*Math.sin(a),ry=cy+dx*Math.sin(a)+dy*Math.cos(a);
+ return Math.hypot(x-rx,y-ry)<=Math.max(24,22/(fitWidth*zoom.value));};
  const selectAt=(x:number,y:number)=>{
+  if(imageDeleteHit(x,y)){deleteSelectedImage();return;}
   const image=[...(content.images??[])].reverse().find(i=>{const cx=i.x+i.width/2,cy=i.y+i.height/2,a=-(i.rotation??0),dx=x-cx,dy=y-cy,px=dx*Math.cos(a)-dy*Math.sin(a)+cx,py=dx*Math.sin(a)+dy*Math.cos(a)+cy;return px>=i.x&&px<=i.x+i.width&&py>=i.y&&py<=i.y+i.height});
   if(image){setImageId(image.id);onImageSelectionChange?.(image.id);setSelectedIds([]);onSelectionChange?.([]);return;}
   setImageId(null);onImageSelectionChange?.(null);
@@ -695,7 +701,13 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <GestureDetector gesture={gestures}><View style={{flex:1,touchAction:'none'}}><Canvas style={{flex:1}}>
  <Group transform={transform}>
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
- {(content.images??[]).map(source=>{const item=source.id===displayImageId&&paintedImage?paintedImage:source;const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/>{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={x} cy={y} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></Group>)}</>}</Group>;return item.id===displayImageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
+ {(content.images??[]).map(source=>{const item=source.id===displayImageId&&paintedImage?paintedImage:source;const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/><Group>
+     <Circle cx={item.x+item.width-12} cy={item.y+12} r={18} color="#FFFFFF"/>
+     <Circle cx={item.x+item.width-12} cy={item.y+12} r={18} color="#E5484D" style="stroke" strokeWidth={2}/>
+     <Rect x={item.x+item.width-18} y={item.y+7} width={12} height={12} color="#E5484D" style="stroke" strokeWidth={2}/>
+     <Line p1={vec(item.x+item.width-20,item.y+5)} p2={vec(item.x+item.width-4,item.y+5)} color="#E5484D" strokeWidth={2}/>
+     <Line p1={vec(item.x+item.width-14,item.y+9)} p2={vec(item.x+item.width-14,item.y+17)} color="#E5484D" strokeWidth={1.5}/>
+    </Group>{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={x} cy={y} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></Group>)}</>}</Group>;return item.id===displayImageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
