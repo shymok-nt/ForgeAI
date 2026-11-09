@@ -11,7 +11,8 @@ export function parseContent(raw:string):PageContent{
  if(e.type==='shape'){const p=e.params as Record<string,unknown>|undefined;return ['line','arrow','rect','ellipse','triangle','polygon'].includes(String(e.kind))&&!!p&&['x','y','w','h','rotation'].every(k=>typeof p[k]==='number'&&Number.isFinite(p[k]))&&!!e.stroke}
  return false;
  });
- return {v:2,elements};
+ const h=typeof obj.h==='number'&&Number.isFinite(obj.h)&&obj.h>=1414?Math.min(obj.h,1000000):undefined;
+ return h===undefined?{v:2,elements}:{v:2,elements,h};
  }catch{return emptyContent()}
 }
 export function serializeContent(content:PageContent){return JSON.stringify(content)}
