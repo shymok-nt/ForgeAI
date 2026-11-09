@@ -1,6 +1,19 @@
 import * as SQLite from 'expo-sqlite';
+import {Platform} from 'react-native';
 import { migrations } from '@/db/migrations';
 let instance:Promise<SQLite.SQLiteDatabase>|null=null;
+// Expo SQLite web does not implement withExclusiveTransactionAsync.
+// Web uses the supported transaction API; native keeps exclusive transactions.
+export async function withSafeTransaction<T>(db:SQLite.SQLiteDatabase,run:(tx:SQLite.SQLiteDatabase)=>Promise<T>):Promise<T>{
+ if(Platform.OS==='web'){
+  let result!:T;
+  await db.withTransactionAsync(async()=>{result=await run(db)});
+  return result;
+ }
+ let result!:T;
+ await db.withExclusiveTransactionAsync(async tx=>{result=await run(tx as SQLite.SQLiteDatabase)});
+ return result;
+}
 async function openAndMigrate(){
  const db=await SQLite.openDatabaseAsync('notex.db');
  await db.execAsync('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
