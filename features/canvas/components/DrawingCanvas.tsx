@@ -157,13 +157,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  useEffect(()=>{selectedRotationValue.value=selectedRotation;},[selectedRotation]);
  // As soon as persisted geometry arrives, the handoff draws that geometry
  // instead of re-projecting the old path. This prevents stale-size flashes.
- const handoffCommitted=!!handoff&&handoff.elements.every(old=>{
-  const current=content.elements.find(e=>e.id===old.id);
-  return !!current&&current!==old;
- });
- const handoffElements=handoffCommitted?selectedElements:handoff?.elements??[];
- const handoffBounds=handoffCommitted&&selectedBounds?selectedBounds:handoff?.bounds??null;
- const handoffRotation=handoffCommitted?selectedRotation:handoff?.rotation??0;
+ // The handoff always contains the FINAL geometry, never an old path.
+ // Switching between old and new paths was the source of the release flash.
+ const handoffElements=handoff?.elements??[];
+ const handoffBounds=handoff?.bounds??null;
+ const handoffRotation=handoff?.rotation??0;
  // The selection border has a constant screen-space inset while the
  // shape scales. Without this correction its 10px padding scales too,
  // so the frame visibly jumps when the saved geometry replaces the preview.
@@ -203,9 +201,14 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(!ids.size)return;
   const b=selectedBounds;
   if(!b)return;
+  const next=content.elements.map(e=>ids.has(e.id)?moveElement(e,dx,dy):e);
+  const finalElements=next.filter(e=>ids.has(e.id));
+  const finalFrame=selectionFrame(finalElements);
+  if(!finalFrame)return;
+  if(handoffFrame.current!==null){cancelAnimationFrame(handoffFrame.current);handoffFrame.current=null;}
   pendingHandoff.current=true;
-  setHandoff({elements:selectedElements,bounds:b,rotation:selectedRotation,dx,dy,scale:1,angle:0});
-  onChange(withHeight(content.elements.map(e=>ids.has(e.id)?moveElement(e,dx,dy):e)));
+  setHandoff({elements:finalElements,bounds:finalFrame.bounds,rotation:finalFrame.rotation,dx:0,dy:0,scale:1,angle:0});
+  onChange(withHeight(next));
  };
  const commitGesture=(dx:number,dy:number,scale:number,angle:number)=>{
   const ids=new Set(selectedRef.current);
@@ -231,10 +234,14 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    if(Math.abs(dx)+Math.abs(dy)>0.0001)out=moveElement(out,dx,dy);
    return out;
   });
-  // Keep the last visible pose until the persisted geometry is ready.
+  // Publish the final path and its matching selection frame together.
+  // No stale geometry is ever drawn while React/Skia apply the update.
+  const finalElements=next.filter(e=>ids.has(e.id));
+  const finalFrame=selectionFrame(finalElements);
+  if(!finalFrame)return;
   if(handoffFrame.current!==null){cancelAnimationFrame(handoffFrame.current);handoffFrame.current=null;}
   pendingHandoff.current=true;
-  setHandoff({elements:selectedElements,bounds:b,rotation:selectedRotation,dx,dy,scale,angle});
+  setHandoff({elements:finalElements,bounds:finalFrame.bounds,rotation:finalFrame.rotation,dx:0,dy:0,scale:1,angle:0});
   onChange(withHeight(next));
  };
  // The handoff layer must mount before the UI-thread transform is reset.
@@ -251,7 +258,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   // after the pointer is released.
   const committed=handoff.elements.every(old=>{
    const now=content.elements.find(e=>e.id===old.id);
-   return now&&now!==old;
+   return now===old;
   });
   if(!committed)return;
   pendingHandoff.current=false;
@@ -523,14 +530,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    {selectionCorners.map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={selectionHandleRadius} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={selectionHandleRadius} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
   </Group>
  </Group>}
- {tool==='select'&&handoff&&handoffBounds&&<Group transform={handoffCommitted?[]:[
-  {translateX:handoff.dx},{translateY:handoff.dy},
-  {translateX:(handoff.bounds[0]+handoff.bounds[2])/2},
-  {translateY:(handoff.bounds[1]+handoff.bounds[3])/2},
-  {rotate:handoff.angle},{scale:handoff.scale},
-  {translateX:-(handoff.bounds[0]+handoff.bounds[2])/2},
-  {translateY:-(handoff.bounds[1]+handoff.bounds[3])/2}
- ]}>
+ {tool==='select'&&handoff&&handoffBounds&&<Group>
   {handoffElements.map(element=><StrokeLayer key={element.id} element={element}/>)}
   <Group origin={vec((handoffBounds[0]+handoffBounds[2])/2,(handoffBounds[1]+handoffBounds[3])/2)} transform={[{rotate:handoffRotation}]}>
    <Rect x={handoffBounds[0]-10} y={handoffBounds[1]-10} width={handoffBounds[2]-handoffBounds[0]+20} height={handoffBounds[3]-handoffBounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
