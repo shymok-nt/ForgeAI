@@ -16,7 +16,7 @@ export function makeStroke(samples:Sample[],options:Pick<StrokeElement,'tool'|'c
  return {...options,id,type:'stroke',z,createdAt:new Date().toISOString(),points,bbox:[Math.min(...xs)-pad,Math.min(...ys)-pad,Math.max(...xs)+pad,Math.max(...ys)+pad]};
 }
 export function strokePath(stroke:StrokeElement):SkPath{
- const points:Sample=[];for(let i=0;i<stroke.points.length;i+=3)points.push([stroke.points[i],stroke.points[i+1],stroke.points[i+2]]);
+ const points:Sample[]=[];for(let i=0;i<stroke.points.length;i+=3)points.push([stroke.points[i],stroke.points[i+1],stroke.points[i+2]]);
  const outline=getStroke(points,{size:stroke.width,thinning:stroke.tool==='pen'?0.55:0,smoothing:0.55,streamline:0.45,simulatePressure:points.every(p=>p[2]===0.5),start:{cap:true,taper:0},end:{cap:true,taper:0}});
  const path=Skia.Path.Make();if(!outline.length)return path;
  path.moveTo(outline[0][0],outline[0][1]);for(let i=1;i<outline.length;i++)path.lineTo(outline[i][0],outline[i][1]);path.close();return path;
