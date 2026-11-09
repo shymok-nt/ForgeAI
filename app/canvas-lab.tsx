@@ -1,6 +1,6 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {PixelRatio,Pressable,SafeAreaView,Text,View,useWindowDimensions} from 'react-native';
-import {Canvas,Image as SkImage,Path,Skia,type SkImage as SkImageType,type SkSurface} from '@shopify/react-native-skia';
+import {Canvas,Group,Image as SkImage,Path,Skia,PaintStyle,StrokeCap,StrokeJoin,BlendMode,type SkImage as SkImageType,type SkSurface} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector} from 'react-native-gesture-handler';
 import {useDerivedValue,useFrameCallback,useSharedValue} from 'react-native-reanimated';
 
@@ -41,12 +41,12 @@ export default function CanvasLab(){
  const lastX=useSharedValue(0),lastY=useSharedValue(0);
  const strokePaint=useDerivedValue(()=>{
   const p=Skia.Paint();p.setAntiAlias(true);p.setColor(Skia.Color(INK));
-  p.setStyle(1);p.setStrokeWidth(4*ratio);p.setStrokeCap(1);p.setStrokeJoin(1);
+  p.setStyle(PaintStyle.Stroke);p.setStrokeWidth(4*ratio);p.setStrokeCap(StrokeCap.Round);p.setStrokeJoin(StrokeJoin.Round);
   return p;
  },[ratio]);
  const erasePaint=useDerivedValue(()=>{
-  const p=Skia.Paint();p.setAntiAlias(true);p.setBlendMode(0); // Clear
-  p.setStyle(1);p.setStrokeCap(1);p.setStrokeJoin(1);p.setStrokeWidth(radius.value*2*ratio);
+  const p=Skia.Paint();p.setAntiAlias(true);p.setBlendMode(BlendMode.Clear); // Clear
+  p.setStyle(PaintStyle.Stroke);p.setStrokeCap(StrokeCap.Round);p.setStrokeJoin(StrokeJoin.Round);p.setStrokeWidth(radius.value*2*ratio);
   return p;
  },[ratio]);
  const publish=()=>{'worklet';
@@ -61,7 +61,7 @@ export default function CanvasLab(){
   const n=Math.max(1,Math.ceil(Math.hypot(dx,dy)/step));
   const path=Skia.Path.Make();path.moveTo(x0*ratio,y0*ratio);
   for(let i=1;i<=n;i++)path.lineTo((x0+dx*i/n)*ratio,(y0+dy*i/n)*ratio);
-  const p=Skia.Paint();p.setAntiAlias(true);p.setBlendMode(0);
+  const p=Skia.Paint();p.setAntiAlias(true);p.setBlendMode(BlendMode.Clear);
   p.setStyle(1);p.setStrokeCap(1);p.setStrokeJoin(1);p.setStrokeWidth(radius.value*2*ratio);
   s.getCanvas().drawPath(path,p);
   lastX.value=x;lastY.value=y;publish();
@@ -117,7 +117,7 @@ export default function CanvasLab(){
  const seed=()=>{
   const s=surface.value;if(!s)return;
   const t=Date.now();const canvas=s.getCanvas();const p=Skia.Paint();
-  p.setAntiAlias(true);p.setColor(Skia.Color(INK));p.setStyle(1);p.setStrokeWidth(4*ratio);p.setStrokeCap(1);p.setStrokeJoin(1);
+  p.setAntiAlias(true);p.setColor(Skia.Color(INK));p.setStyle(PaintStyle.Stroke);p.setStrokeWidth(4*ratio);p.setStrokeCap(StrokeCap.Round);p.setStrokeJoin(StrokeJoin.Round);
   for(let i=0;i<1000;i++){
    const x=(12+Math.random()*(viewport.width-24))*ratio,y=(12+Math.random()*(viewport.height-24))*ratio;
    const path=Skia.Path.Make();path.moveTo(x,y);
@@ -159,7 +159,7 @@ export default function CanvasLab(){
    <GestureDetector gesture={pan}><View style={{flex:1}}>
     <Canvas style={{flex:1}}>
      <SkImage image={displayedImage} x={0} y={0} width={viewport.width} height={viewport.height}/>
-     <Path path={displayedPath} color={INK} style="stroke" strokeWidth={4} strokeCap="round" strokeJoin="round"/>
+     <Group transform={[{scale:1/ratio}]}><Path path={displayedPath} color={INK} style="stroke" strokeWidth={4*ratio} strokeCap="round" strokeJoin="round"/></Group>
      <Path path={ringPath} color="#7C8799" style="stroke" strokeWidth={1.5}/>
     </Canvas>
    </View></GestureDetector>
