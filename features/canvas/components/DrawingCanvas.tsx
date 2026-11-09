@@ -105,6 +105,12 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const samples=useSharedValue<Sample[]>([]),blocked=useSharedValue(false),drawing=useSharedValue(false);
  const dragX=useSharedValue(0),dragY=useSharedValue(0),draggingSelection=useSharedValue(false);
  const dragPending=useSharedValue(false);
+ const cornerActive=useSharedValue(false),cornerStartX=useSharedValue(0),cornerStartY=useSharedValue(0);
+ const cornerCenterX=useSharedValue(0),cornerCenterY=useSharedValue(0);
+ const cornerStartRadius=useSharedValue(1),cornerStartAngle=useSharedValue(0);
+ const cornerLastAngle=useSharedValue(0),cornerAccumAngle=useSharedValue(0);
+ const cornerMode=useSharedValue(0); // 0 undecided, 1 resize, 2 rotate
+ const cornerStartPageX=useSharedValue(0),cornerStartPageY=useSharedValue(0);
  const gestureScale=useSharedValue(1),gestureAngle=useSharedValue(0);
  const gestureDX=useSharedValue(0),gestureDY=useSharedValue(0);
  const transformActive=useSharedValue(false),transformPending=useSharedValue(false);
@@ -250,7 +256,29 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   // The previous zero-distance Pan gesture prevented LongPress from reliably activating.
   if(tool==='select'&&selectionBoundsValue.value){
    const p=pagePoint(e.x,e.y),b=selectionBoundsValue.value;
-   const hitSlop=18/(fitWidth*zoom.value);
+   const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;
+   const cornerRadius=22/(fitWidth*zoom.value);
+   const corners:[[number,number],[number,number],[number,number],[number,number]]=[
+    [b[0]-10,b[1]-10],[b[2]+10,b[1]-10],[b[0]-10,b[3]+10],[b[2]+10,b[3]+10]
+   ];
+   let cornerHit=false;
+   for(const corner of corners){
+    if(Math.hypot(p[0]-corner[0],p[1]-corner[1])<=cornerRadius){
+     cornerHit=true;
+     cornerActive.value=true;cornerMode.value=0;
+     cornerCenterX.value=cx;cornerCenterY.value=cy;
+     cornerStartX.value=corner[0];cornerStartY.value=corner[1];
+     cornerStartPageX.value=p[0];cornerStartPageY.value=p[1];
+     cornerStartRadius.value=Math.max(1,Math.hypot(corner[0]-cx,corner[1]-cy));
+     cornerStartAngle.value=Math.atan2(corner[1]-cy,corner[0]-cx);
+     cornerLastAngle.value=cornerStartAngle.value;cornerAccumAngle.value=0;
+     gestureCenterX.value=cx;gestureCenterY.value=cy;
+     gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
+     break;
+    }
+   }
+   if(cornerHit){samples.value=[];drawing.value=false;draft.value='';return;}
+   const hitSlop=12/(fitWidth*zoom.value);
    if(p[0]>=b[0]-hitSlop&&p[0]<=b[2]+hitSlop&&p[1]>=b[1]-hitSlop&&p[1]<=b[3]+hitSlop){
     draggingSelection.value=true;dragX.value=0;dragY.value=0;
     samples.value=[];drawing.value=false;draft.value='';
@@ -266,6 +294,28 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  }).onUpdate(e=>{
   if(blocked.value||e.numberOfPointers!==1)return;
   if(tool==='hand'){const [x,y]=clamp(zoom.value,baseX.value+e.translationX,baseY.value+e.translationY);offsetX.value=x;offsetY.value=y;return}
+  if(cornerActive.value){
+   const p=pagePoint(e.x,e.y),cx=cornerCenterX.value,cy=cornerCenterY.value;
+   const dx=p[0]-cornerStartPageX.value,dy=p[1]-cornerStartPageY.value;
+   const startX=cornerStartX.value-cx,startY=cornerStartY.value-cy;
+   const tangent=(-startY*dx+startX*dy)/cornerStartRadius.value;
+   const radial=(startX*dx+startY*dy)/cornerStartRadius.value;
+   // Vertical dragging changes size; sweeping around the selection rotates it.
+   if(cornerMode.value===0&&Math.hypot(dx,dy)>8/(fitWidth*zoom.value))
+    cornerMode.value=Math.abs(dy)>Math.abs(dx)*1.35?1:Math.abs(tangent)>Math.abs(radial)*0.7?2:1;
+   if(cornerMode.value===1){
+    gestureScale.value=Math.max(0.15,Math.min(8,1-dy/Math.max(80,cornerStartRadius.value)));
+    gestureAngle.value=0;
+   }else if(cornerMode.value===2){
+    const angle=Math.atan2(p[1]-cy,p[0]-cx);
+    let delta=angle-cornerLastAngle.value;
+    if(delta>Math.PI)delta-=2*Math.PI;
+    if(delta<-Math.PI)delta+=2*Math.PI;
+    cornerAccumAngle.value+=delta;cornerLastAngle.value=angle;
+    gestureAngle.value=cornerAccumAngle.value;gestureScale.value=1;
+   }
+   return;
+  }
   if(draggingSelection.value){
    dragX.value=e.translationX/(fitWidth*zoom.value);
    dragY.value=e.translationY/(fitWidth*zoom.value);
@@ -288,6 +338,15 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
   if(tool==='eraser'){cursorX.value=p[0];cursorY.value=p[1];cursorOn.value=true}
  }).onEnd(()=>{
+  if(cornerActive.value){
+   const scale=gestureScale.value,angle=gestureAngle.value;
+   cornerActive.value=false;cornerMode.value=0;
+   if(!blocked.value&&(Math.abs(scale-1)>0.0001||Math.abs(angle)>0.0001)){
+    transformPending.value=true;
+    runOnJS(commitGesture)(0,0,scale,angle);
+   }else {gestureScale.value=1;gestureAngle.value=0;}
+   runOnJS(notify)(false);return;
+  }
   if(draggingSelection.value){
    const dx=dragX.value,dy=dragY.value;
    draggingSelection.value=false;
@@ -298,7 +357,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
   if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;cursorOn.value=false;runOnJS(notify)(false);
- }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false;if(!dragPending.value){dragX.value=0;dragY.value=0;}}).runOnJS(false);
+ }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false;cornerActive.value=false;if(!dragPending.value){dragX.value=0;dragY.value=0;}}).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(e=>{
   if(tool==='select'&&selectionBoundsValue.value){
    blocked.value=true;samples.value=[];draft.value='';drawing.value=false;
