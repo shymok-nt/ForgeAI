@@ -515,7 +515,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
- {tool==='select'&&(handoffBounds||selectedBounds)&&<Group transform={selectionTransform}>
+ {tool==='select'&&(handoffBounds||selectedBounds)&&<Group transform={handoffMatchesSelection?[]:selectionTransform}>
   {(handoffMatchesSelection?handoffElements:selectedElements).map(element=><StrokeLayer key={element.id} element={element}/>)}
   {(()=>{
    const bounds=handoffBounds??selectedBounds!;
