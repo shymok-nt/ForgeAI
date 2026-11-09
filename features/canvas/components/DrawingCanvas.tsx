@@ -151,6 +151,24 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const gestureCenterX=useSharedValue(0),gestureCenterY=useSharedValue(0);
 
  const selectedElements=useMemo(()=>content.elements.filter(e=>selectedIds.includes(e.id)),[content,selectedIds]);
+ // Freeze the selected Skia paths for the entire selection session.
+ // Saving a gesture updates document data, NOT the visible path tree.
+ const selectionKey=selectedIds.join('|');
+ const frozenSelection=useRef<{key:string;elements:Element[];frame:ReturnType<typeof selectionFrame>}|null>(null);
+ if(!frozenSelection.current||frozenSelection.current.key!==selectionKey){
+  frozenSelection.current={key:selectionKey,elements:selectedElements,frame:selectionFrame(selectedElements)};
+ }
+ const paintedElements=frozenSelection.current.elements;
+ const paintedFrame=frozenSelection.current.frame;
+ const committedDX=useSharedValue(0),committedDY=useSharedValue(0);
+ const committedScale=useSharedValue(1),committedAngle=useSharedValue(0);
+ const resetPaintedTransform=()=>{
+  committedDX.value=0;committedDY.value=0;
+  committedScale.value=1;committedAngle.value=0;
+  dragX.value=0;dragY.value=0;gestureScale.value=1;gestureAngle.value=0;
+ };
+ useLayoutEffect(()=>{resetPaintedTransform();},[selectionKey,tool]);
+
  // Only retain a handoff while it represents the same selection.
  const handoffMatchesSelection=!!handoff&&handoff.elements.length===selectedIds.length&&
   handoff.elements.every(e=>selectedIds.includes(e.id));
@@ -183,26 +201,22 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const dragTransform=useDerivedValue(()=>[{translateX:dragX.value},{translateY:dragY.value}]);
  // A fixed-length transform keeps Skia's animated property binding intact
  // for the first and every subsequent gesture.
- const selectionTransform=useDerivedValue(()=>{
-  // Never apply the previous gesture's transform to newly committed paths.
-  // The switch to the committed geometry and the identity transform happen
-  // together, rather than displaying a stale frame on pointer release.
-  const live=selectionPreviewLive.value;
-  return [
-   {translateX:live?dragX.value+gestureDX.value:0},
-   {translateY:live?dragY.value+gestureDY.value:0},
-   {translateX:live?gestureCenterX.value:0},
-   {translateY:live?gestureCenterY.value:0},
-   {rotate:live?gestureAngle.value:0},
-   {scale:live?gestureScale.value:1},
-   {translateX:live?-gestureCenterX.value:0},
-   {translateY:live?-gestureCenterY.value:0}
-  ];
- });
+ const paintedCenterX=paintedFrame?(paintedFrame.bounds[0]+paintedFrame.bounds[2])/2:0;
+ const paintedCenterY=paintedFrame?(paintedFrame.bounds[1]+paintedFrame.bounds[3])/2:0;
+ const selectionTransform=useDerivedValue(()=>[
+  {translateX:committedDX.value+dragX.value+gestureDX.value},
+  {translateY:committedDY.value+dragY.value+gestureDY.value},
+  {translateX:paintedCenterX},
+  {translateY:paintedCenterY},
+  {rotate:committedAngle.value+gestureAngle.value},
+  {scale:committedScale.value*gestureScale.value},
+  {translateX:-paintedCenterX},
+  {translateY:-paintedCenterY}
+ ]);
  const selectAt=(x:number,y:number)=>{
   const margin=16/fitWidth;
   const hit=[...content.elements].reverse().find(e=>x>=e.bbox[0]-margin&&x<=e.bbox[2]+margin&&y>=e.bbox[1]-margin&&y<=e.bbox[3]+margin);
-  if(hit){if(!selectedRef.current.includes(hit.id))setHandoff(null);setSelectedIds([hit.id]);onSelectionChange?.([hit.id]);}
+  if(hit){if(!selectedRef.current.includes(hit.id)){resetPaintedTransform();setHandoff(null);}setSelectedIds([hit.id]);onSelectionChange?.([hit.id]);}
  };
  const commitSelectionMove=(dx:number,dy:number)=>{
   if(Math.hypot(dx,dy)<0.1)return;
@@ -257,9 +271,9 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  // Reset worklet transforms only after that group has switched to final geometry.
  useLayoutEffect(()=>{
   if(!handoff)return;
-  selectionPreviewLive.value=false;
-  dragX.value=0;dragY.value=0;dragPending.value=false;
-  gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
+  // The painted geometry stays frozen; the UI worklet has already folded
+  // this gesture into its accumulated transform before the JS commit.
+  dragPending.value=false;
   transformPending.value=false;
   
  },[handoff]);
@@ -448,6 +462,9 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    cornerActive.value=false;cornerMode.value=0;
    if(!blocked.value&&(Math.abs(scale-1)>0.0001||Math.abs(angle)>0.0001)){
     transformPending.value=true;
+    committedScale.value*=scale;
+    committedAngle.value+=angle;
+    gestureScale.value=1;gestureAngle.value=0;
     runOnJS(commitGesture)(0,0,scale,angle);
    }else {gestureScale.value=1;gestureAngle.value=0;selectionPreviewLive.value=false}
    runOnJS(notify)(false);return;
@@ -455,7 +472,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(draggingSelection.value){
    const dx=dragX.value,dy=dragY.value;
    draggingSelection.value=false;
-   if(!blocked.value&&Math.hypot(dx,dy)>0.1){runOnJS(commitSelectionMove)(dx,dy);}
+   if(!blocked.value&&Math.hypot(dx,dy)>0.1){committedDX.value+=dx;committedDY.value+=dy;dragX.value=0;dragY.value=0;runOnJS(commitSelectionMove)(dx,dy);}
    else {dragX.value=0;dragY.value=0}
    drawing.value=false;
    runOnJS(notify)(false);return;
@@ -530,12 +547,13 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
- {tool==='select'&&(handoffBounds||selectedBounds)&&<Group transform={selectionTransform}>
-  {baselineElements.map(element=><StrokeLayer key={element.id} element={element}/>)}
+ {tool==='select'&&paintedFrame&&<Group transform={selectionTransform}>
+  {paintedElements.map(element=><StrokeLayer key={element.id} element={element}/>)}
   {(()=>{
-   const bounds=handoffBounds??selectedBounds!;
-   const rotation=handoffMatchesSelection?handoffRotation:selectedRotation;
-   const x=bounds[0]-selectionPadding,y=bounds[1]-selectionPadding,w=bounds[2]-bounds[0]+2*selectionPadding,h=bounds[3]-bounds[1]+2*selectionPadding;
+   const bounds=paintedFrame.bounds;
+   const rotation=paintedFrame.rotation;
+   const padding=Math.max(0,...paintedElements.map(e=>e.type==='shape'?e.stroke.width/2:0));
+   const x=bounds[0]-padding,y=bounds[1]-padding,w=bounds[2]-bounds[0]+2*padding,h=bounds[3]-bounds[1]+2*padding;
    return <Group origin={vec((bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2)} transform={[{rotate:rotation}]}>
     <Rect x={x} y={y} width={w} height={h} color="#3388EE" style="stroke" strokeWidth={1.5}/>
     {[[x,y],[x+w,y],[x,y+h],[x+w,y+h]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
