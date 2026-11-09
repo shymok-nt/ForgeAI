@@ -443,7 +443,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    const dx=(p[0]-cx-imageCommittedX.value-imageDX.value)/scale;
    const dy=(p[1]-cy-imageCommittedY.value-imageDY.value)/scale;
    const lx=cx+dx*cos+dy*sin,ly=cy-dx*sin+dy*cos;
-   const radius=24/(fitWidth*zoom.value);
+   const radius=24/(fitWidth*zoom.value)/scale;
    if(Platform.OS==='web'){
     const corners:[[number,number],[number,number],[number,number],[number,number]]=[[bounds[0],bounds[1]],[bounds[2],bounds[1]],[bounds[0],bounds[3]],[bounds[2],bounds[3]]];
     for(const [hx,hy] of corners){
@@ -451,8 +451,12 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
      const anchorX=hx===bounds[0]?bounds[2]:bounds[0],anchorY=hy===bounds[1]?bounds[3]:bounds[1];
      imageCorner.value=true;imageCornerAnchorX.value=anchorX;imageCornerAnchorY.value=anchorY;
      imageCornerSignX.value=hx===bounds[0]?-1:1;imageCornerSignY.value=hy===bounds[1]?-1:1;
-     imageCornerStart.value=Math.max(1,Math.hypot(hx-anchorX,hy-anchorY));
-     imageCornerX.value=hx;imageCornerY.value=hy;imageScale.value=1;
+     // Capture the pointer and the CURRENT painted corner. Using the old
+     // untransformed corner made the first update snap the image smaller.
+     const vx=(hx-cx)*scale,vy=(hy-cy)*scale;
+     const cornerDX=vx*cos-vy*sin,cornerDY=vx*sin+vy*cos;
+     imageCornerStart.value=Math.max(1,Math.hypot(cornerDX,cornerDY));
+     imageCornerX.value=p[0];imageCornerY.value=p[1];imageScale.value=1;
      samples.value=[];drawing.value=false;draft.value='';blocked.value=false;
      return;
     }
@@ -513,7 +517,21 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
  }).onUpdate(e=>{
   if(blocked.value||e.numberOfPointers!==1)return;
-  if(imageCorner.value){const p=pagePoint(e.x,e.y),b=imageBounds.value;if(!b)return;const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;const a=paintedImageRef.current?.rotation??0,cos=Math.cos(a),sin=Math.sin(a),dx=p[0]-cx,dy=p[1]-cy;const lx=cx+dx*cos+dy*sin,ly=cy-dx*sin+dy*cos;const vx=lx-imageCornerAnchorX.value,vy=ly-imageCornerAnchorY.value;const sx=imageCornerX.value-imageCornerAnchorX.value,sy=imageCornerY.value-imageCornerAnchorY.value;imageScale.value=Math.max(0.15,Math.min(8,(vx*sx+vy*sy)/Math.max(1,sx*sx+sy*sy)));return;}
+  if(imageCorner.value){
+   const p=pagePoint(e.x,e.y),b=imagePaintBounds.value;if(!b)return;
+   const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;
+   const totalAngle=(paintedImageRef.current?.rotation??0)+imageCommittedAngle.value;
+   const cos=Math.cos(totalAngle),sin=Math.sin(totalAngle);
+   const vx=imageCornerSignX.value*(b[2]-b[0])/2;
+   const vy=imageCornerSignY.value*(b[3]-b[1])/2;
+   const ux=(vx*cos-vy*sin)/Math.max(1,Math.hypot(vx,vy));
+   const uy=(vx*sin+vy*cos)/Math.max(1,Math.hypot(vx,vy));
+   const movement=(p[0]-imageCornerX.value)*ux+(p[1]-imageCornerY.value)*uy;
+   // Relative pointer movement starts at scale 1, even after repeated
+   // resizes and rotations. Keep the frozen Skia baseline for no jitter.
+   imageScale.value=Math.max(0.15,Math.min(8,1+movement/imageCornerStart.value));
+   return;
+  }
   if(imageDragging.value){imageDX.value=e.translationX/(fitWidth*zoom.value);imageDY.value=e.translationY/(fitWidth*zoom.value);return}
   if(imageBounds.value)return;
   if(tool==='hand'){const [x,y]=clamp(zoom.value,baseX.value+e.translationX,baseY.value+e.translationY);offsetX.value=x;offsetY.value=y;return}
