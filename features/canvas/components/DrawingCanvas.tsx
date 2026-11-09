@@ -62,9 +62,13 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const pageHeight=Math.max(PAGE_HEIGHT,content.h??PAGE_HEIGHT,Math.ceil(size.height/fitWidth));
  const withHeight=(elements:Element[],minimum=pageHeight):PageContent=>({v:2,elements,h:Math.max(pageHeight,minimum)});
  const fitAll=Math.max(0.01,Math.min(fitWidth,size.height/pageHeight));
- const minZoom=0.8;
+ const minZoom=1;
  const zoom=useSharedValue(1),offsetX=useSharedValue(0),offsetY=useSharedValue(0);
  const awaitingCommit=useSharedValue(false);
+ const cursorX=useSharedValue(0),cursorY=useSharedValue(0),cursorOn=useSharedValue(false);
+ const eraserWidth=useDerivedValue(()=>eraserSize*1.2/(fitWidth*zoom.value));
+ const eraserRadius=useDerivedValue(()=>eraserWidth.value/2);
+ const cursorOpacity=useDerivedValue(()=>cursorOn.value?0.6:0);
  const draft=useSharedValue(''),baseZoom=useSharedValue(1),baseX=useSharedValue(0),baseY=useSharedValue(0),pinchX=useSharedValue(0),pinchY=useSharedValue(0);
  const samples=useSharedValue<Sample[]>([]),blocked=useSharedValue(false),drawing=useSharedValue(false);
  const selectionStart=useSharedValue<Sample|null>(null);
@@ -93,13 +97,24 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const shape=makeShape(shapeKind,first[0],first[1],w,h,brush.color,brush.width,brush.opacity,shapeFill);shape.z=content.elements.length;
   onChange(withHeight([...content.elements,shape],shape.bbox[3]+400));return;
  }
- if(tool==='eraser'){const next=pixelErase(content.elements,points,eraserSize/2,eraserMode==='stroke');if(next!==content.elements)onChange(withHeight(next));else awaitingCommit.value=false;return}
+ if(tool==='eraser'){
+     const radius=eraserSize*1.2/2/(fitWidth*zoom.value);
+     const next=pixelErase(content.elements,points,radius,eraserMode==='stroke');
+     if(next!==content.elements)onChange(withHeight(next));
+     else{draft.value='';awaitingCommit.value=false}
+     return;
+   }
   const stroke=makeStroke(points,{tool:tool==='highlighter'?'highlighter':'pen',...brush},Crypto.randomUUID(),content.elements.length);
   onChange(withHeight([...content.elements,stroke],stroke.bbox[3]+400));
  };
  const notify=(active:boolean)=>onDrawingActive?.(active);
  const complete=(points:Sample[])=>{endStroke(points);};
- useLayoutEffect(()=>{if(awaitingCommit.value){draft.value='';awaitingCommit.value=false}},[content]);
+ useEffect(()=>{
+     if(!awaitingCommit.value)return;
+     let r2=0;
+     const r1=requestAnimationFrame(()=>{r2=requestAnimationFrame(()=>{draft.value='';awaitingCommit.value=false})});
+     return()=>{cancelAnimationFrame(r1);cancelAnimationFrame(r2)};
+   },[content]);
  const pan=Gesture.Pan().minDistance(0).onTouchesDown(e=>{
   if(e.allTouches.length>1){blocked.value=true;samples.value=[];draft.value='';drawing.value=false}
  }).onBegin(e=>{
@@ -107,6 +122,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
   if(tool==='hand'){baseX.value=offsetX.value;baseY.value=offsetY.value;return}
   samples.value=[pagePoint(e.x,e.y)];drawing.value=false;draft.value='';
+  if(tool==='eraser'){
+    const q=samples.value[0];
+    draft.value='M'+q[0]+' '+q[1]+' L'+(q[0]+0.01)+' '+q[1];
+    cursorX.value=q[0];cursorY.value=q[1];cursorOn.value=true;drawing.value=true;runOnJS(notify)(true);
+  }
  }).onUpdate(e=>{
   if(blocked.value||e.numberOfPointers!==1)return;
   if(tool==='hand'){const [x,y]=clamp(zoom.value,baseX.value+e.translationX,baseY.value+e.translationY);offsetX.value=x;offsetY.value=y;return}
@@ -115,20 +135,23 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   samples.value=[...samples.value,p];
   if(!drawing.value&&Date.now()-downTime.value<70&&Math.hypot(e.x-startX.value,e.y-startY.value)<6)return;
   if(!drawing.value){drawing.value=true;runOnJS(notify)(true)}
-  if(tool==='eraser')return;
-  const pts=samples.value;
-  draft.value=pts.map((v,i)=>`${i===0?'M':'L'}${Math.round(v[0]*10)/10} ${Math.round(v[1]*10)/10}`).join(' ');
+  if(draft.value===''){
+    draft.value='M'+samples.value.map(v=>Math.round(v[0]*10)/10+' '+Math.round(v[1]*10)/10).join(' L');
+  }else{
+    draft.value=draft.value+' L'+Math.round(p[0]*10)/10+' '+Math.round(p[1]*10)/10;
+  }
+  if(tool==='eraser'){cursorX.value=p[0];cursorY.value=p[1];cursorOn.value=true}
  }).onEnd(()=>{
   if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
-  samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;runOnJS(notify)(false);
- }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false}).runOnJS(false);
+  samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;cursorOn.value=false;runOnJS(notify)(false);
+ }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false}).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(()=>{blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value;pinchX.value=0;pinchY.value=0}).onUpdate(e=>{
   const z=Math.max(minZoom,Math.min(5,baseZoom.value*e.scale));
   if(pinchX.value===0&&pinchY.value===0){pinchX.value=e.focalX;pinchY.value=e.focalY}
   const [x,y]=clamp(z,baseX.value+e.focalX-pinchX.value,baseY.value+e.focalY-pinchY.value);zoom.value=z;offsetX.value=x;offsetY.value=y;
  }).onEnd(()=>{blocked.value=true}).runOnJS(false);
  const doubleTap=Gesture.Tap().numberOfTaps(2).onEnd(()=>{
-  const z=zoom.value===1?fitAll/fitWidth:zoom.value<1?2:1;
+  const z=zoom.value<1.5?2.5:1;
   zoom.value=z;offsetX.value=0;offsetY.value=0;
  });
  const gestures=Gesture.Simultaneous(pan,pinch,doubleTap);
@@ -137,9 +160,13 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <GestureDetector gesture={gestures}><View style={{flex:1}}><Canvas style={{flex:1}}>
  <Group transform={transform}>
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight}/>
- <Completed content={content}/>
+ <Group layer={tool==='eraser'}>
+  <Completed content={content}/>
+  {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
+ </Group>
  {selectedIds.length>0&&(()=>{const es=content.elements.filter(e=>selectedIds.includes(e.id));if(!es.length)return null;const b=[Math.min(...es.map(e=>e.bbox[0])),Math.min(...es.map(e=>e.bbox[1])),Math.max(...es.map(e=>e.bbox[2])),Math.max(...es.map(e=>e.bbox[3]))];return <><Rect x={b[0]} y={b[1]} width={b[2]-b[0]} height={b[3]-b[1]} color="#3388EE" style="stroke" strokeWidth={2}/>{[[b[0],b[1]],[b[2],b[1]],[b[0],b[3]],[b[2],b[3]]].map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={7} color="#FFFFFF"/>)}</>})()}
 
- <Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>
+ {tool!=='eraser'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
+ {tool==='eraser'&&<Circle cx={cursorX} cy={cursorY} r={eraserRadius} color="#808080" opacity={cursorOpacity} style="stroke" strokeWidth={1.5}/>}
  </Group></Canvas></View></GestureDetector></View>;
 }
