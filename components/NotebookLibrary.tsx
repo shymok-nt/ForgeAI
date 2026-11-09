@@ -27,7 +27,8 @@ export function NotebookLibrary({favorites=false}:{favorites?:boolean}){const {c
  <View style={styles.top}><Text style={styles.brand}>{favorites?'Favoriler':'Notex'}</Text><View style={styles.topActions}>{!favorites&&<Pressable accessibilityRole="button" accessibilityLabel="Ara" onPress={()=>router.push('/search')} style={styles.round}><Search size={22} color={colors.ink}/></Pressable>}<Pressable accessibilityRole="button" accessibilityLabel="Sırala ve görünüm" style={styles.round} onPress={()=>setMenu(true)}><MoreHorizontal size={22} color={colors.ink}/></Pressable></View></View>
  {!favorites&&<View style={styles.filters}><FolderChips value={folder} onChange={setFolder}/></View>}
 
- {checked.length>0&&<View style={{marginTop:8,marginBottom:6,paddingHorizontal:10,minHeight:56,borderRadius:14,borderWidth:1,borderColor:colors.divider,backgroundColor:colors.surface+'E8',flexDirection:'row',alignItems:'center',gap:6}}>
+
+ <View style={[styles.section,{minHeight:62,alignItems:'center'}]}>{checked.length>0?(<View style={{flexDirection:'row',alignItems:'center',minHeight:52,gap:6,flex:1,minWidth:0}}>
  <Text numberOfLines={1} style={{fontFamily:fonts.semibold,fontSize:13,color:colors.ink,marginRight:4}}>{checked.length} seçili</Text>
  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{alignItems:'center',gap:4}}>
  <Pressable disabled={working} accessibilityRole="button" accessibilityLabel="Seçilen defterleri çoğalt" onPress={async()=>{setWorking(true);try{for(const id of checked)await duplicate(id);setChecked([])}finally{setWorking(false)}}} style={styles.slimAction}><Copy size={17} color={colors.accent}/><Text style={[styles.slimText,{color:colors.accent}]}>Çoğalt</Text></Pressable>
@@ -36,9 +37,7 @@ export function NotebookLibrary({favorites=false}:{favorites?:boolean}){const {c
  {checked.length===1&&<Pressable accessibilityRole="button" accessibilityLabel="Diğer defter işlemleri" onPress={()=>setSelected(all.find(n=>n.id===checked[0])??null)} style={styles.slimAction}><MoreHorizontal size={17} color={colors.ink}/><Text style={styles.slimText}>Diğer</Text></Pressable>}
  </ScrollView>
  <Pressable accessibilityRole="button" accessibilityLabel="Seçimi iptal et" onPress={()=>setChecked([])} style={{width:40,height:44,alignItems:'center',justifyContent:'center'}}><X size={19} color={colors.ink}/></Pressable>
- </View>}
-
- <View style={styles.section}><Text style={styles.sectionTitle}>{favorites?'Favori defterler':'Defterlerim'}</Text><Text style={styles.count}>{data.length} defter</Text></View>
+ </View>):<><Text style={styles.sectionTitle}>{favorites?'Favori defterler':'Defterlerim'}</Text><Text style={styles.count}>{data.length} defter</Text></>}</View>
  <FlatList key={`${columns}-${viewMode}`} style={{flex:1}} data={data} numColumns={columns} keyExtractor={n=>n.id} columnWrapperStyle={columns>1?{gap:20}:undefined} contentContainerStyle={data.length?{paddingBottom:120}:{flexGrow:1,paddingBottom:120,justifyContent:'center'}} renderItem={({item})=><View style={columns>1?{width:cardWidth,marginBottom:24}:{flex:1}}><NotebookCard notebook={item} width={cardWidth} viewMode={viewMode} onOpen={()=>open(item.id)} onOptions={()=>toggleChecked(item.id)} onMenu={()=>setSelected(item)} selected={checked.includes(item.id)}/></View>} ListEmptyComponent={<EmptyState/>}/>
 
  {!favorites&&<Pressable accessibilityRole="button" accessibilityLabel="Yeni defter" onPress={()=>editor()} style={styles.fab}><Plus size={28} strokeWidth={3} color={colors.surface}/></Pressable>}
