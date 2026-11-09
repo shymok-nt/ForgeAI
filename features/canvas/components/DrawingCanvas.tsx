@@ -153,6 +153,9 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const handoffMatchesSelection=!!handoff&&handoff.elements.length===selectedIds.length&&
   handoff.elements.every(e=>selectedIds.includes(e.id));
 
+ // Use the same committed baseline for drawing, hit-testing and the next edit.
+ // Parent content can arrive a render later than the locally committed handoff.
+ const baselineElements=handoffMatchesSelection?handoff!.elements:selectedElements;
  const selectedFrame=useMemo(()=>selectionFrame(selectedElements),[selectedElements]);
  // Use the same geometry for gesture hit-testing, transform center and rendering.
  // A retained handoff is the current visible baseline until another commit.
@@ -164,7 +167,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  // instead of re-projecting the old path. This prevents stale-size flashes.
  // The handoff always contains the FINAL geometry, never an old path.
  // Switching between old and new paths was the source of the release flash.
- const handoffElements=handoffMatchesSelection?handoff!.elements:[];
+ const handoffElements=baselineElements;
  const handoffBounds=handoffMatchesSelection?handoff!.bounds:null;
  const handoffRotation=handoffMatchesSelection?handoff!.rotation:0;
  // The selection border has a constant screen-space inset while the
@@ -208,7 +211,8 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(!ids.size)return;
   const b=selectedBounds;
   if(!b)return;
-  const next=content.elements.map(e=>ids.has(e.id)?moveElement(e,dx,dy):e);
+  const baseline=new Map(baselineElements.map(e=>[e.id,e]));
+  const next=content.elements.map(e=>ids.has(e.id)?moveElement(baseline.get(e.id)??e,dx,dy):e);
   const finalElements=next.filter(e=>ids.has(e.id));
   const finalFrame=selectionFrame(finalElements);
   if(!finalFrame)return;
@@ -223,9 +227,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(!b)return;
   const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;
   const cos=Math.cos(angle),sin=Math.sin(angle);
+  const baseline=new Map(baselineElements.map(e=>[e.id,e]));
   const next=content.elements.map(e=>{
    if(!ids.has(e.id))return e;
-   let out=e;
+   let out=baseline.get(e.id)??e;
    if(Math.abs(scale-1)>0.0001)out=scaleElement(out,cx,cy,scale,scale);
    if(Math.abs(angle)>0.0001){
     out=rotateElement(out,cx,cy,angle);
@@ -524,7 +529,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
  {tool==='select'&&(handoffBounds||selectedBounds)&&<Group transform={selectionTransform}>
-  {(handoffMatchesSelection?handoffElements:selectedElements).map(element=><StrokeLayer key={element.id} element={element}/>)}
+  {baselineElements.map(element=><StrokeLayer key={element.id} element={element}/>)}
   {(()=>{
    const bounds=handoffBounds??selectedBounds!;
    const rotation=handoffMatchesSelection?handoffRotation:selectedRotation;
