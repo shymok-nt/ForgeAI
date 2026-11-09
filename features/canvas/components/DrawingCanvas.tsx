@@ -456,7 +456,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   {tool==='select'&&selectedElements.length>0&&!handoff&&<Group transform={selectionTransform}>{selectedElements.map(element=><StrokeLayer key={element.id} element={element}/>)}</Group>}
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
- {tool==='select'&&selectedBounds&&<Group transform={selectionTransform} opacity={selectionHandoffOpacity}>
+ {tool==='select'&&selectedBounds&&!handoff&&<Group transform={selectionTransform}>
   <Rect x={selectedBounds[0]-10} y={selectedBounds[1]-10} width={selectedBounds[2]-selectedBounds[0]+20} height={selectedBounds[3]-selectedBounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
   {[[selectedBounds[0]-10,selectedBounds[1]-10],[selectedBounds[2]+10,selectedBounds[1]-10],[selectedBounds[0]-10,selectedBounds[3]+10],[selectedBounds[2]+10,selectedBounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
  </Group>}
