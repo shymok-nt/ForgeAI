@@ -16,7 +16,7 @@ export function NotebookLibrary({favorites=false}:{favorites?:boolean}){const {c
  const all=useNotebookStore(s=>s.notebooks),folder=useNotebookStore(s=>s.selectedFolder),setFolder=useNotebookStore(s=>s.setSelectedFolder),sortBy=useNotebookStore(s=>s.sortBy),setSortBy=useNotebookStore(s=>s.setSortBy),viewMode=useNotebookStore(s=>s.viewMode),setViewMode=useNotebookStore(s=>s.setViewMode);
  const toggle=useNotebookStore(s=>s.toggleFavorite),duplicate=useNotebookStore(s=>s.duplicateNotebook),remove=useNotebookStore(s=>s.deleteNotebook);
  const [menu,setMenu]=useState(false),[selected,setSelected]=useState<Notebook|null>(null),[moveTarget,setMoveTarget]=useState<Notebook|null>(null);const folders=useNotebookStore(s=>s.folders),moveNotebook=useNotebookStore(s=>s.moveNotebook);
- const {width}=useWindowDimensions();const columns=viewMode==='grid'?Math.max(2,Math.min(4,Math.floor((width-40+20)/170))):1;const cardWidth=(width-40-(columns-1)*20)/columns;
+ const {width}=useWindowDimensions();const columns=viewMode==='grid'?Math.max(2,Math.floor((width-40+20)/190)):1;const cardWidth=viewMode==='grid'?Math.min(170,(width-40-(columns-1)*20)/columns):Math.max(0,width-40);
  const data=useMemo(()=>sortNotebooks(all.filter(n=>(!favorites||n.favorite)&&(favorites||folder==='Tümü'||n.folder===folder)),sortBy),[all,folder,favorites,sortBy]);
  const open=(id:string)=>router.push({pathname:'/note/[id]',params:{id}});
  const editor=(id?:string)=>router.push({pathname:'/notebook-editor',params:id?{id}:{}});
