@@ -18,6 +18,32 @@ const bbox=(points:P[],pad:number):Bounds=>{
 };
 const overlaps=(a:Bounds,b:Bounds)=>a[0]<=b[2]&&a[2]>=b[0]&&a[1]<=b[3]&&a[3]>=b[1];
 const pathLength=(points:P[])=>points.slice(1).reduce((sum,p,i)=>sum+Math.hypot(p[0]-points[i][0],p[1]-points[i][1]),0);
+// Convert an unfilled vector outline to centerline segments so the pixel eraser
+// can split only the touched portion instead of deleting the entire shape.
+const shapeOutline=(e:Extract<Element,{type:'shape'}>):P[]|null=>{
+ const {x,y,w,h,points}=e.params;
+ const left=Math.min(x,x+w),right=Math.max(x,x+w);
+ const top=Math.min(y,y+h),bottom=Math.max(y,y+h);
+ const pt=(a:number,b:number):P=>[a,b,0.5];
+ if(e.kind==='line')return [pt(x,y),pt(x+w,y+h)];
+ if(e.kind==='arrow'){
+  // Arrowheads are separate paths, handled independently below.
+  return [pt(x,y),pt(x+w,y+h)];
+ }
+ if(e.kind==='rect')return [pt(left,top),pt(right,top),pt(right,bottom),pt(left,bottom),pt(left,top)];
+ if(e.kind==='triangle')return [pt(x+w/2,y),pt(x+w,y+h),pt(x,y+h),pt(x+w/2,y)];
+ if(e.kind==='polygon'&&points&&points.length>=6){
+  const poly:P[]=[];
+  for(let i=0;i<points.length;i+=2)poly.push(pt(points[i],points[i+1]));
+  return [...poly,poly[0]];
+ }
+ if(e.kind==='ellipse'){
+  const cx=(left+right)/2,cy=(top+bottom)/2,rx=(right-left)/2,ry=(bottom-top)/2;
+  const count=Math.max(48,Math.ceil(2*Math.PI*Math.max(rx,ry)/2));
+  return Array.from({length:count+1},(_,i)=>pt(cx+rx*Math.cos(2*Math.PI*i/count),cy+ry*Math.sin(2*Math.PI*i/count)));
+ }
+ return null;
+};
 export function pixelErase(elements:Element[],path:P[],radius:number,wholeStroke=false):Element[]{
  if(!path.length)return elements;
  const eraserBox=bbox(path,radius+80);
@@ -25,16 +51,21 @@ export function pixelErase(elements:Element[],path:P[],radius:number,wholeStroke
  const result:Element[]=[];
  for(const e of elements){
   if(!overlaps(e.bbox,eraserBox)){result.push(e);continue}
+  let source:StrokeElement;
   if(e.type==='shape'){
-   // Vector shapes retain whole-element erasing until outline clipping is supported.
-   const corners:P[]=[[e.bbox[0],e.bbox[1],0.5],[e.bbox[2],e.bbox[1],0.5],[e.bbox[0],e.bbox[3],0.5],[e.bbox[2],e.bbox[3],0.5]];
-   if(corners.some(p=>near(p,path,radius+e.stroke.width/2)<=0)||near([(e.bbox[0]+e.bbox[2])/2,(e.bbox[1]+e.bbox[3])/2,0.5],path,radius+e.stroke.width/2)<=0){changed=true;continue}
-   result.push(e);continue;
-  }
+   if(e.fill||wholeStroke){
+    // Filled shapes cannot be safely cut by centerline splitting.
+    // Never remove a whole filled shape in pixel mode.
+    result.push(e);continue;
+   }
+   const outline=shapeOutline(e);
+   if(!outline){result.push(e);continue}
+   source={id:e.id,type:'stroke',renderMode:'centerline',z:e.z,createdAt:e.createdAt,tool:'pen',color:e.stroke.color,width:e.stroke.width,opacity:e.stroke.opacity,points:outline.flatMap(p=>p),bbox:e.bbox};
+  }else source=e;
   const original:P[]=[];
-  for(let i=0;i<e.points.length;i+=3)original.push([e.points[i],e.points[i+1],e.points[i+2]]);
+  for(let i=0;i<source.points.length;i+=3)original.push([source.points[i],source.points[i+1],source.points[i+2]]);
   if(!original.length){result.push(e);continue}
-  const r=radius+e.width/2;
+  const r=radius; // Match the displayed eraser radius; do not expand by pen width.
   // Resample long segments to prevent fast eraser movements from leaving gaps.
   const dense:P[]=[original[0]];
   for(let i=1;i<original.length;i++){
@@ -64,8 +95,8 @@ export function pixelErase(elements:Element[],path:P[],radius:number,wholeStroke
   }
   if(current.length>1)chunks.push(current);
   for(let i=0;i<chunks.length;i++){
-   const pts=chunks[i];if(pathLength(pts)<e.width*1.5)continue;
-   const newStroke:StrokeElement={...e,id:e.id+'-cut-'+i+'-'+Date.now(),points:pts.flatMap(p=>p.map(round)),bbox:bbox(pts,e.width/2)};
+   const pts=chunks[i];if(pathLength(pts)<source.width*0.25)continue;
+   const newStroke:StrokeElement={...source,id:source.id+'-cut-'+i+'-'+Date.now(),points:pts.flatMap(p=>p.map(round)),bbox:bbox(pts,source.width/2)};
    result.push(newStroke);
   }
  }
