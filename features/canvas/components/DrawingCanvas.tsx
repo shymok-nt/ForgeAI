@@ -246,11 +246,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(blocked.value||e.numberOfPointers!==1)return;
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
   if(tool==='hand'){baseX.value=offsetX.value;baseY.value=offsetY.value;return}
-  if(tool==='select'){
-   const p=pagePoint(e.x,e.y),b=selectionBoundsValue.value;
-   const margin=12/(fitWidth*zoom.value);
-   // A press on the current selection is eligible for long-press dragging.
-  }
+  // Selection is activated by tapping an element or drawing a lasso.
   samples.value=[pagePoint(e.x,e.y)];drawing.value=false;draft.value='';
   if(tool==='eraser'){
     const q=samples.value[0];
@@ -294,7 +290,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;cursorOn.value=false;runOnJS(notify)(false);
  }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false}).runOnJS(false);
  const hold=Gesture.LongPress().minDuration(320).maxDistance(14).onStart(e=>{
-  if(tool!=='select'||blocked.value)return;
+  if(tool!=='select'||blocked.value||!selectionBoundsValue.value)return;
   const p=pagePoint(e.x,e.y);
   // Select the topmost shape at the touch position before allowing a drag.
   runOnJS(selectAt)(p[0],p[1]);
@@ -303,17 +299,18 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   drawing.value=true;runOnJS(notify)(true);
  }).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(e=>{
-  if(tool==='select'&&transformMode&&selectedBounds){
+  if(tool==='select'&&selectionBoundsValue.value){
    blocked.value=true;samples.value=[];draft.value='';drawing.value=false;
    transformActive.value=true;pinchActive.value=true;
    gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
    gestureFocalX.value=e.focalX;gestureFocalY.value=e.focalY;
-   gestureCenterX.value=(selectedBounds[0]+selectedBounds[2])/2;
-   gestureCenterY.value=(selectedBounds[1]+selectedBounds[3])/2;
+   const bounds=selectionBoundsValue.value;
+   gestureCenterX.value=(bounds[0]+bounds[2])/2;
+   gestureCenterY.value=(bounds[1]+bounds[3])/2;
    runOnJS(notify)(true);return;
   }
   blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value;pinchX.value=0;pinchY.value=0}).onUpdate(e=>{
-  if(tool==='select'&&transformMode&&selectedBounds){
+  if(tool==='select'&&selectionBoundsValue.value){
    gestureScale.value=Math.max(0.15,Math.min(8,e.scale));
    gestureDX.value=(e.focalX-gestureFocalX.value)/(fitWidth*zoom.value);
    gestureDY.value=(e.focalY-gestureFocalY.value)/(fitWidth*zoom.value);
@@ -323,7 +320,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(pinchX.value===0&&pinchY.value===0){pinchX.value=e.focalX;pinchY.value=e.focalY}
   const [x,y]=clamp(z,baseX.value+e.focalX-pinchX.value,baseY.value+e.focalY-pinchY.value);zoom.value=z;offsetX.value=x;offsetY.value=y;
  }).onEnd(()=>{
-  if(tool==='select'&&transformMode&&transformActive.value){
+  if(tool==='select'&&transformActive.value){
    pinchActive.value=false;
    if(!rotateActive.value){
     const dx=gestureDX.value,dy=gestureDY.value,scale=gestureScale.value,angle=gestureAngle.value;
@@ -338,11 +335,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   blocked.value=true;
  }).runOnJS(false);
  const rotation=Gesture.Rotation().onBegin(()=>{
-  if(tool==='select'&&transformMode&&selectedBounds){rotateActive.value=true;}
+  if(tool==='select'&&selectionBoundsValue.value){rotateActive.value=true;}
  }).onUpdate(e=>{
-  if(tool==='select'&&transformMode&&transformActive.value)gestureAngle.value=e.rotation;
+  if(tool==='select'&&transformActive.value)gestureAngle.value=e.rotation;
  }).onEnd(()=>{
-  if(tool==='select'&&transformMode&&transformActive.value){
+  if(tool==='select'&&transformActive.value){
    rotateActive.value=false;
    if(!pinchActive.value){
     const dx=gestureDX.value,dy=gestureDY.value,scale=gestureScale.value,angle=gestureAngle.value;
@@ -355,6 +352,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
  }).runOnJS(false);
  const doubleTap=Gesture.Tap().numberOfTaps(2).onEnd(()=>{
+  if(tool==='select'&&selectionBoundsValue.value)return;
   const z=zoom.value<1.5?2.5:1;
   zoom.value=z;offsetX.value=0;offsetY.value=0;
  });
