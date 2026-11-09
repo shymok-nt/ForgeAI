@@ -27,7 +27,7 @@ const StaticPaper=memo(function StaticPaper({template,paperColor,pageHeight}:{te
  const lines=useMemo(()=>{
   const items:{x1:number;y1:number;x2:number;y2:number}[]=[];
   if(template==='çizgili'||template==='kareli')for(let y=56;y<pageHeight;y+=42)items.push({x1:0,y1:y,x2:PAGE_WIDTH,y2:y});
-  if(template==='kareli')for(let x=42;x<PAGE_WIDTH;x+=42)items.push({x1:x,y1:0,x2:x,y2:PAGE_HEIGHT});
+  if(template==='kareli')for(let x=42;x<PAGE_WIDTH;x+=42)items.push({x1:x,y1:0,x2:x,y2:pageHeight});
   return items;
  },[template,pageHeight]);
  const dots=useMemo(()=>template==='noktalı'?Array.from({length:Math.floor(pageHeight/42)*Math.floor(PAGE_WIDTH/42)},(_,i)=>{const cols=Math.floor(PAGE_WIDTH/42);return [i%cols*42+21,Math.floor(i/cols)*42+21] as const}):[],[template,pageHeight]);
