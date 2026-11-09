@@ -141,6 +141,8 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const cornerStartPageX=useSharedValue(0),cornerStartPageY=useSharedValue(0);
  const gestureScale=useSharedValue(1),gestureAngle=useSharedValue(0);
  const gestureDX=useSharedValue(0),gestureDY=useSharedValue(0);
+ // Keep the preview pose until the final shape is mounted on release.
+ const selectionPreviewLive=useSharedValue(false);
  const transformActive=useSharedValue(false),transformPending=useSharedValue(false);
  const [handoff,setHandoff]=useState<{elements:Element[];bounds:readonly [number,number,number,number];rotation:number;dx:number;dy:number;scale:number;angle:number}|null>(null);
  const pendingHandoff=useRef(false);
@@ -181,16 +183,22 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const dragTransform=useDerivedValue(()=>[{translateX:dragX.value},{translateY:dragY.value}]);
  // A fixed-length transform keeps Skia's animated property binding intact
  // for the first and every subsequent gesture.
- const selectionTransform=useDerivedValue(()=>[
-  {translateX:dragX.value+gestureDX.value},
-  {translateY:dragY.value+gestureDY.value},
-  {translateX:gestureCenterX.value},
-  {translateY:gestureCenterY.value},
-  {rotate:gestureAngle.value},
-  {scale:gestureScale.value},
-  {translateX:-gestureCenterX.value},
-  {translateY:-gestureCenterY.value}
- ]);
+ const selectionTransform=useDerivedValue(()=>{
+  // Never apply the previous gesture's transform to newly committed paths.
+  // The switch to the committed geometry and the identity transform happen
+  // together, rather than displaying a stale frame on pointer release.
+  const live=selectionPreviewLive.value;
+  return [
+   {translateX:live?dragX.value+gestureDX.value:0},
+   {translateY:live?dragY.value+gestureDY.value:0},
+   {translateX:live?gestureCenterX.value:0},
+   {translateY:live?gestureCenterY.value:0},
+   {rotate:live?gestureAngle.value:0},
+   {scale:live?gestureScale.value:1},
+   {translateX:live?-gestureCenterX.value:0},
+   {translateY:live?-gestureCenterY.value:0}
+  ];
+ });
  const selectAt=(x:number,y:number)=>{
   const margin=16/fitWidth;
   const hit=[...content.elements].reverse().find(e=>x>=e.bbox[0]-margin&&x<=e.bbox[2]+margin&&y>=e.bbox[1]-margin&&y<=e.bbox[3]+margin);
@@ -249,6 +257,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  // Reset worklet transforms only after that group has switched to final geometry.
  useLayoutEffect(()=>{
   if(!handoff)return;
+  selectionPreviewLive.value=false;
   dragX.value=0;dragY.value=0;dragPending.value=false;
   gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
   transformPending.value=false;
@@ -348,6 +357,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    for(const corner of corners){
     if(Math.hypot(p[0]-corner[0],p[1]-corner[1])<=cornerRadius){
      cornerHit=true;
+     selectionPreviewLive.value=true;
      cornerActive.value=true;cornerMode.value=0;
      cornerCenterX.value=cx;cornerCenterY.value=cy;
      cornerStartX.value=corner[0];cornerStartY.value=corner[1];
@@ -366,6 +376,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
     const localX=cx+(p[0]-cx)*cos+(p[1]-cy)*sin;
     const localY=cy-(p[0]-cx)*sin+(p[1]-cy)*cos;
     if(localX>=b[0]-hitSlop&&localX<=b[2]+hitSlop&&localY>=b[1]-hitSlop&&localY<=b[3]+hitSlop){
+    selectionPreviewLive.value=true;
     draggingSelection.value=true;dragX.value=0;dragY.value=0;
     samples.value=[];drawing.value=false;draft.value='';
     return;
@@ -438,7 +449,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    if(!blocked.value&&(Math.abs(scale-1)>0.0001||Math.abs(angle)>0.0001)){
     transformPending.value=true;
     runOnJS(commitGesture)(0,0,scale,angle);
-   }else {gestureScale.value=1;gestureAngle.value=0}
+   }else {gestureScale.value=1;gestureAngle.value=0;selectionPreviewLive.value=false}
    runOnJS(notify)(false);return;
   }
   if(draggingSelection.value){
