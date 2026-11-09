@@ -1,6 +1,6 @@
 import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {View,PixelRatio,type LayoutChangeEvent} from 'react-native';
-import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,useImage,Skia,vec} from '@shopify/react-native-skia';
+import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,Skia,vec} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector} from 'react-native-gesture-handler';
 import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
@@ -103,8 +103,19 @@ const StrokeLayer=memo(function StrokeLayer({element}:{element:Element}){
  return <Path path={path} color={element.color} opacity={element.opacity} blendMode={element.tool==='highlighter'?'multiply':'srcOver'} {...(element.renderMode==='centerline'?{style:'stroke' as const,strokeWidth:element.width,strokeCap:'round' as const,strokeJoin:'round' as const}:{})}/>;
 });
 const PageImageLayer=memo(function PageImageLayer({item}:{item:import('@/features/canvas/types').PageImage}){
- const data=useMemo(()=>{try{return Skia.Data.fromBase64(item.uri.split(',')[1]??'')}catch{return null}},[item.uri]);
- const image=useImage(data);
+ // Gallery images are persisted as data URLs. useImage expects a URI/source,
+ // not a Skia Data object; decode encoded bytes directly on both native and web.
+ const image=useMemo(()=>{
+  try{
+   const encoded=item.uri.includes(',')?item.uri.slice(item.uri.indexOf(',')+1):'';
+   if(!encoded)return null;
+   const data=Skia.Data.fromBase64(encoded);
+   return Skia.Image.MakeImageFromEncoded(data);
+  }catch(error){
+   console.warn('Notex: image decode failed',error);
+   return null;
+  }
+ },[item.uri]);
  return image?<SkiaImage image={image} x={item.x} y={item.y} width={item.width} height={item.height} fit="contain"/>:null;
 });
 const Completed=memo(function Completed({content,hiddenIds}:{content:PageContent;hiddenIds?:string[]}){
