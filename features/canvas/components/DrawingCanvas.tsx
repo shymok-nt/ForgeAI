@@ -316,9 +316,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    const p=pagePoint(e.x,e.y),b=selectionBoundsValue.value;
    const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;
    const cornerRadius=22/(fitWidth*zoom.value);
+   const rotation=selectedRotationValue.value,cos=Math.cos(rotation),sin=Math.sin(rotation);
    const corners:[[number,number],[number,number],[number,number],[number,number]]=[
     [b[0]-10,b[1]-10],[b[2]+10,b[1]-10],[b[0]-10,b[3]+10],[b[2]+10,b[3]+10]
-   ];
+   ].map(([x,y])=>[cx+(x-cx)*cos-(y-cy)*sin,cy+(x-cx)*sin+(y-cy)*cos]) as [[number,number],[number,number],[number,number],[number,number]];
    let cornerHit=false;
    for(const corner of corners){
     if(Math.hypot(p[0]-corner[0],p[1]-corner[1])<=cornerRadius){
@@ -345,6 +346,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
     samples.value=[];drawing.value=false;draft.value='';
     return;
    }
+  }
+  if(tool==='select'){
+   samples.value=[pagePoint(e.x,e.y)];drawing.value=false;draft.value='';
+   return;
   }
   samples.value=[pagePoint(e.x,e.y)];drawing.value=false;draft.value='';
   if(tool==='eraser'){
@@ -382,6 +387,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    dragY.value=e.translationY/(fitWidth*zoom.value);
    return;
   }
+  if(tool==='select')return;
   const p=pagePoint(e.x,e.y),prev=samples.value[samples.value.length-1];
   if(prev&&Math.hypot((p[0]-prev[0])*fitWidth*zoom.value,(p[1]-prev[1])*fitWidth*zoom.value)<1.5)return;
   samples.value=[...samples.value,p];
@@ -507,7 +513,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    {[[handoff.bounds[0]-10,handoff.bounds[1]-10],[handoff.bounds[2]+10,handoff.bounds[1]-10],[handoff.bounds[0]-10,handoff.bounds[3]+10],[handoff.bounds[2]+10,handoff.bounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
   </Group>
  </Group>}
- {tool!=='eraser'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
+ {tool!=='eraser'&&tool!=='select'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
  {tool==='eraser'&&<Circle cx={cursorX} cy={cursorY} r={eraserRadius} color="#808080" opacity={cursorOpacity} style="stroke" strokeWidth={1.5}/>}
  </Group></Canvas></View></GestureDetector></View>;
 }
