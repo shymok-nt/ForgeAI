@@ -6,16 +6,20 @@ import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement} from '@/features/canvas/types';
 import {makeStroke,strokePath,strokeHit} from '@/features/canvas/engine/geometry';
+import {shapePath,makeShape,lassoSelect,moveElement,scaleElement,rotateElement} from '@/features/canvas/engine/shapes';
+import type {ShapeKind,Element} from '@/features/canvas/types';
 import type {PageTemplate,PaperColor} from '@/types/notebook';
-export type Tool='pen'|'highlighter'|'eraser'|'hand';
+export type Tool='pen'|'highlighter'|'eraser'|'hand'|'select'|'shape';
 export type Brush={color:string;width:number;opacity:number};
 type Sample=[number,number,number];
-type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void};
+type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;shapeKind?:ShapeKind;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}};
 const Completed=memo(function Completed({content,view}:{content:PageContent;view:[number,number,number,number]}){
- const paths=useMemo(()=>content.elements.filter(s=>{const b=s.bbox;return b[2]>=view[0]&&b[0]<=view[2]&&b[3]>=view[1]&&b[1]<=view[3]}).map(s=>({element:s,path:strokePath(s)})).sort((a,b)=>(a.element.tool==='highlighter'?0:1)-(b.element.tool==='highlighter'?0:1)),[content,view[0],view[1],view[2],view[3]]);
- return <>{paths.map(({element,path})=><Path key={element.id} path={path} color={element.color} opacity={element.opacity} blendMode={element.tool==='highlighter'?'multiply':'srcOver'}/>)}</>;
+ const paths=useMemo(()=>content.elements.filter(s=>{const b=s.bbox;return b[2]>=view[0]&&b[0]<=view[2]&&b[3]>=view[1]&&b[1]<=view[3]}).map(s=>({element:s,path:s.type==='stroke'?strokePath(s):shapePath(s)})).sort((a,b)=>(a.element.tool==='highlighter'?0:1)-(b.element.tool==='highlighter'?0:1)),[content,view[0],view[1],view[2],view[3]]);
+ return <>{paths.map(({element,path})=>element.type==='stroke'?<Path key={element.id} path={path} color={element.color} opacity={element.opacity} blendMode={element.tool==='highlighter'?'multiply':'srcOver'}/>:<React.Fragment key={element.id}>{element.fill&&<Path path={path} color={element.fill.color} opacity={element.fill.opacity} style="fill"/>}<Path path={path} color={element.stroke.color} opacity={element.stroke.opacity} style="stroke" strokeWidth={element.stroke.width}/></React.Fragment>)}</>;
 });
-export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,onChange,onDrawingActive}:Props){
+export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,onChange,onDrawingActive,shapeKind='rect',shapeFill=false,onSelectionChange,selectionAction}:Props){
+ const [selectedIds,setSelectedIds]=useState<string[]>([]);
+ const selectedRef=useRef<string[]>([]);selectedRef.current=selectedIds;
  const [size,setSize]=useState({width:300,height:450});
  const fitWidth=Math.max(0.01,(size.width-4)/PAGE_WIDTH);
  const fitAll=Math.max(0.01,Math.min(fitWidth,(size.height-4)/PAGE_HEIGHT));
@@ -23,6 +27,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const zoom=useSharedValue(1),offsetX=useSharedValue(0),offsetY=useSharedValue(0);
  const draft=useSharedValue(''),baseZoom=useSharedValue(1),baseX=useSharedValue(0),baseY=useSharedValue(0);
  const samples=useSharedValue<Sample[]>([]),blocked=useSharedValue(false),drawing=useSharedValue(false);
+ const selectionStart=useSharedValue<Sample|null>(null);
  const downTime=useSharedValue(0),startX=useSharedValue(0),startY=useSharedValue(0);
  const originX=useDerivedValue(()=>(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value);
  const originY=useDerivedValue(()=>size.height>PAGE_HEIGHT*fitWidth*zoom.value?(size.height-PAGE_HEIGHT*fitWidth*zoom.value)/2+offsetY.value:offsetY.value);
@@ -36,7 +41,19 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  },[size.width,size.height,fitWidth]);
  const layout=(e:LayoutChangeEvent)=>{const {width,height}=e.nativeEvent.layout;if(width===size.width&&height===size.height)return;setSize({width,height});zoom.value=1;offsetX.value=0;offsetY.value=0};
  const pagePoint=(x:number,y:number):Sample=>{ 'worklet';return [(x-originX.value)/(fitWidth*zoom.value),(y-originY.value)/(fitWidth*zoom.value),0.5]};
- const endStroke=(points:Sample[])=>{if(!points.length)return;if(tool==='eraser'){const hits=new Set<string>();for(const p of points)for(const s of content.elements)if(strokeHit(s,p[0],p[1],eraserSize))hits.add(s.id);if(hits.size)onChange({v:2,elements:content.elements.filter(s=>!hits.has(s.id))});return}
+ const endStroke=(points:Sample[])=>{if(!points.length)return;
+ if(tool==='select'){
+  const poly=points.flatMap(p=>[p[0],p[1]]);
+  const ids=lassoSelect(content.elements,poly);
+  if(!ids.length&&points.length<=3){const p=points[0];const hit=content.elements.filter(e=>p[0]>=e.bbox[0]-12&&p[0]<=e.bbox[2]+12&&p[1]>=e.bbox[1]-12&&p[1]<=e.bbox[3]+12).at(-1);if(hit)ids.push(hit.id)}
+  setSelectedIds(ids);onSelectionChange?.(ids);return;
+ }
+ if(tool==='shape'){
+  const first=points[0],last=points[points.length-1];let w=last[0]-first[0],h=last[1]-first[1];if(Math.abs(Math.abs(w)-Math.abs(h))/Math.max(1,Math.abs(w),Math.abs(h))<0.05){h=Math.sign(h||1)*Math.abs(w)}
+  const shape=makeShape(shapeKind,first[0],first[1],w,h,brush.color,brush.width,brush.opacity,shapeFill);shape.z=content.elements.length;
+  onChange({v:2,elements:[...content.elements,shape]});return;
+ }
+ if(tool==='eraser'){const hits=new Set<string>();for(const p of points)for(const s of content.elements)if(strokeHit(s,p[0],p[1],eraserSize))hits.add(s.id);if(hits.size)onChange({v:2,elements:content.elements.filter(s=>!hits.has(s.id))});return}
   const stroke=makeStroke(points,{tool:tool==='highlighter'?'highlighter':'pen',...brush},Crypto.randomUUID(),content.elements.length);
   onChange({v:2,elements:[...content.elements,stroke]});
  };
