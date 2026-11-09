@@ -1,5 +1,5 @@
 import { useMemo,useState } from 'react';
-import { Alert,Platform,FlatList,Modal,Pressable,SafeAreaView,StyleSheet,Text,View,useWindowDimensions } from 'react-native';
+import { FlatList,Modal,Pressable,SafeAreaView,StyleSheet,Text,View,useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { BookOpen,MoreHorizontal,Plus,Search } from 'lucide-react-native';
 import { NotebookCard } from '@/components/NotebookCard';
@@ -20,21 +20,7 @@ export function NotebookLibrary({favorites=false}:{favorites?:boolean}){const {c
  const data=useMemo(()=>sortNotebooks(all.filter(n=>(!favorites||n.favorite)&&(favorites||folder==='Tümü'||n.folder===folder)),sortBy),[all,folder,favorites,sortBy]);
  const open=(id:string)=>router.push({pathname:'/note/[id]',params:{id}});
  const editor=(id?:string)=>router.push({pathname:'/notebook-editor',params:id?{id}:{}});
- const deleteSelected=(n:Notebook)=>{
-  // React Native Alert.alert is a no-op on web. Ask for confirmation before
-  // closing the options modal so the delete action is never silently lost.
-  if(Platform.OS==='web'){
-   if(typeof window!=='undefined'&&window.confirm('“'+n.title+'” defteri silinsin mi? Bu işlem geri alınamaz.')){
-    setSelected(null);void remove(n.id);
-   }
-   return;
-  }
-  setSelected(null);
-  Alert.alert('Defteri sil','Bu defter silinsin mi? Bu işlem geri alınamaz.',[
-   {text:'Vazgeç',style:'cancel'},
-   {text:'Sil',style:'destructive',onPress:()=>{void remove(n.id)}}
-  ]);
- };
+ const deleteSelected=(n:Notebook)=>{setSelected(null);void remove(n.id);};
  return <SafeAreaView style={styles.safe}><View style={styles.body}>
  <View style={styles.top}><Text style={styles.brand}>{favorites?'Favoriler':'Notex'}</Text><View style={styles.topActions}>{!favorites&&<Pressable accessibilityRole="button" accessibilityLabel="Ara" onPress={()=>router.push('/search')} style={styles.round}><Search size={22} color={colors.ink}/></Pressable>}<Pressable accessibilityRole="button" accessibilityLabel="Sırala ve görünüm" style={styles.round} onPress={()=>setMenu(true)}><MoreHorizontal size={22} color={colors.ink}/></Pressable></View></View>
  {!favorites&&<View style={styles.filters}><FolderChips value={folder} onChange={setFolder}/></View>}
