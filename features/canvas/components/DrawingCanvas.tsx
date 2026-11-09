@@ -14,7 +14,7 @@ import type {PageTemplate,PaperColor} from '@/types/notebook';
 export type Tool='pen'|'highlighter'|'eraser'|'hand'|'select'|'shape';
 export type Brush={color:string;width:number;opacity:number};
 type Sample=[number,number,number];
-type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number};transformMode?:boolean};
+type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number};transformMode?:boolean;onImageSelectionChange?:(id:string|null)=>void;imageAction?:{kind:'grow'|'shrink'|'delete';version:number}};
 const PAPER_STEP=80;
 const normalizeShapeSize=(kind:string,w:number,h:number):[number,number]=>{ 'worklet';
  if(kind==='triangle'){
@@ -110,9 +110,16 @@ const PageImageLayer=memo(function PageImageLayer({item}:{item:import('@/feature
 const Completed=memo(function Completed({content,hiddenIds}:{content:PageContent;hiddenIds?:string[]}){
  return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)).map(element=><StrokeLayer key={element.id} element={element}/>)}</>;
 });
-export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false}:Props){
+export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false,onImageSelectionChange,imageAction}:Props){
  const [selectedIds,setSelectedIds]=useState<string[]>([]);
  const selectedRef=useRef<string[]>([]);selectedRef.current=selectedIds;
+ const [imageId,setImageId]=useState<string|null>(null);
+ const imageIdRef=useRef<string|null>(null);imageIdRef.current=imageId;
+ useEffect(()=>{if(!imageAction||!imageIdRef.current)return;const id=imageIdRef.current;
+  if(imageAction.kind==='delete'){onChange({...content,images:(content.images??[]).filter(i=>i.id!==id)});setImageId(null);onImageSelectionChange?.(null);return;}
+  const factor=imageAction.kind==='grow'?1.2:1/1.2;
+  onChange({...content,images:(content.images??[]).map(i=>i.id!==id?i:{...i,width:Math.max(50,Math.min(PAGE_WIDTH*2,i.width*factor)),height:Math.max(50,Math.min(PAGE_HEIGHT*2,i.height*factor))})});
+ },[imageAction?.version]);
  useEffect(()=>{if(!selectionAction)return;const ids=new Set(selectedRef.current);if(!ids.size)return;let next:Element[]=content.elements;
  if(selectionAction.kind==='delete')next=next.filter(e=>!ids.has(e.id));
  if(selectionAction.kind==='duplicate')next=[...next,...next.filter(e=>ids.has(e.id)).map(e=>({...moveElement(e,20,20),id:e.id+'-copy-'+selectionAction.version,z:next.length+1}))];
@@ -220,6 +227,9 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   {translateY:-paintedCenterY}
  ]);
  const selectAt=(x:number,y:number)=>{
+  const image=[...(content.images??[])].reverse().find(i=>x>=i.x&&x<=i.x+i.width&&y>=i.y&&y<=i.y+i.height);
+  if(image){setImageId(image.id);onImageSelectionChange?.(image.id);setSelectedIds([]);onSelectionChange?.([]);return;}
+  setImageId(null);onImageSelectionChange?.(null);
   const margin=16/fitWidth;
   const hit=[...content.elements].reverse().find(e=>x>=e.bbox[0]-margin&&x<=e.bbox[2]+margin&&y>=e.bbox[1]-margin&&y<=e.bbox[3]+margin);
   if(hit){if(!selectedRef.current.includes(hit.id)){resetPaintedTransform();setHandoff(null);}setSelectedIds([hit.id]);onSelectionChange?.([hit.id]);}
@@ -357,12 +367,18 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
      const r1=requestAnimationFrame(()=>{r2=requestAnimationFrame(()=>{draft.value='';awaitingCommit.value=false})});
      return()=>{cancelAnimationFrame(r1);cancelAnimationFrame(r2)};
    },[content]);
+ const imageDragging=useSharedValue(false),imageDX=useSharedValue(0),imageDY=useSharedValue(0);
+ const imageBounds=useSharedValue<[number,number,number,number]|null>(null);
+ useEffect(()=>{const i=(content.images??[]).find(x=>x.id===imageId);imageBounds.value=i?[i.x,i.y,i.x+i.width,i.y+i.height]:null},[imageId,content.images]);
+ const imageTransform=useDerivedValue(()=>[{translateX:imageDX.value},{translateY:imageDY.value}]);
+ const commitImageMove=(dx:number,dy:number)=>{const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).map(i=>i.id===id?{...i,x:i.x+dx,y:i.y+dy}:i)})};
  const pan=Gesture.Pan().minDistance(0).onTouchesDown(e=>{
   if(e.allTouches.length>1){blocked.value=true;samples.value=[];draft.value='';drawing.value=false}
  }).onBegin(e=>{
   if(blocked.value||e.numberOfPointers!==1)return;
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
   if(tool==='hand'){baseX.value=offsetX.value;baseY.value=offsetY.value;return}
+  if(tool==='select'&&imageBounds.value){const p=pagePoint(e.x,e.y),b=imageBounds.value;if(p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3]){imageDragging.value=true;imageDX.value=0;imageDY.value=0;return;}}
   // Drag an already selected element immediately; don't wait for a long press.
   // The previous zero-distance Pan gesture prevented LongPress from reliably activating.
   if(tool==='select'&&selectionBoundsValue.value){
@@ -414,6 +430,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
  }).onUpdate(e=>{
   if(blocked.value||e.numberOfPointers!==1)return;
+  if(imageDragging.value){imageDX.value=e.translationX/(fitWidth*zoom.value);imageDY.value=e.translationY/(fitWidth*zoom.value);return}
   if(tool==='hand'){const [x,y]=clamp(zoom.value,baseX.value+e.translationX,baseY.value+e.translationY);offsetX.value=x;offsetY.value=y;return}
   if(cornerActive.value){
    const p=pagePoint(e.x,e.y),cx=cornerCenterX.value,cy=cornerCenterY.value;
@@ -463,6 +480,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
   if(tool==='eraser'){cursorX.value=p[0];cursorY.value=p[1];cursorOn.value=true}
  }).onEnd(()=>{
+  if(imageDragging.value){const dx=imageDX.value,dy=imageDY.value;imageDragging.value=false;imageDX.value=0;imageDY.value=0;if(Math.hypot(dx,dy)>0.1)runOnJS(commitImageMove)(dx,dy);return;}
   if(cornerActive.value){
    const scale=gestureScale.value,angle=gestureAngle.value;
    cornerActive.value=false;cornerMode.value=0;
@@ -560,7 +578,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <GestureDetector gesture={gestures}><View style={{flex:1,touchAction:'none'}}><Canvas style={{flex:1}}>
  <Group transform={transform}>
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
- {(content.images??[]).map(item=><PageImageLayer key={item.id} item={item}/>)}
+ {(content.images??[]).map(item=>item.id===imageId?<Group key={item.id} transform={imageTransform}><PageImageLayer item={item}/><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={3}/></Group>:<PageImageLayer key={item.id} item={item}/>)}
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
