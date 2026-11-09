@@ -9,7 +9,7 @@ import { fonts } from '@/theme/fonts';
 import { darken, lighten, isLightCover } from '@/utils/color';
 import type { Notebook, NotebookDraft } from '@/types/notebook';
 type CoverData=Pick<NotebookDraft,'title'|'coverType'|'coverColor'|'coverImageUri'|'showTitleOnCover'> & {favorite?:boolean};
-export function NotebookCover({notebook,width=160}:{notebook:CoverData;width?:number}){
+export function NotebookCover({notebook,width=160,showTitle=notebook.showTitleOnCover}:{notebook:CoverData;width?:number;showTitle?:boolean}){
  const {colors,scheme}=useTheme();const styles=makeStyles(colors);
  const height=width*4/3,light=notebook.coverType==='color'&&isLightCover(notebook.coverColor);
  const foreground=light?lightColors.ink:lightColors.surface;
@@ -21,7 +21,7 @@ export function NotebookCover({notebook,width=160}:{notebook:CoverData;width?:nu
    <View style={[styles.spine,{width:Math.max(8,width*0.0875),backgroundColor:notebook.coverType==='color'?darken(coverColor,0.2):'#151525B8'}]}>
     {[0,1,2,3].map(i=><View key={i} style={[styles.stitch,{width:Math.max(3,width*0.03),height:Math.max(3,width*0.03)}]}/>)}
    </View>
-   {notebook.showTitleOnCover&&<View style={[styles.label,{left:width*0.15,right:width*0.07,bottom:notebook.coverType==='image'?height*0.29:height*0.13,backgroundColor:notebook.coverType==='image'?'#00000070':light?'#FFFFFF9C':'#FFFFFF27'}]}><Text numberOfLines={3} style={{fontFamily:fonts.heading,fontSize:Math.max(9,width*0.1),textAlign:'center',color:foreground}}>{notebook.title}</Text></View>}
+   {showTitle&&<View style={[styles.label,{left:width*0.15,right:width*0.07,bottom:notebook.coverType==='image'?height*0.29:height*0.13,backgroundColor:notebook.coverType==='image'?'#00000070':light?'#FFFFFF9C':'#FFFFFF27'}]}><Text numberOfLines={3} style={{fontFamily:fonts.heading,fontSize:Math.max(9,width*0.1),textAlign:'center',color:foreground}}>{notebook.title}</Text></View>}
    {notebook.favorite&&<View style={[styles.favorite,{top:Math.max(7,width*0.05),right:Math.max(7,width*0.05)}]}><Star size={Math.max(12,width*0.105)} color="#C68A00" fill={colors.highlight}/></View>}
    <View style={styles.pageRight}/><View style={styles.pageBottom}/>
   </View>
