@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import { getDatabase } from '@/db/database';
+import { getDatabase,withSafeTransaction } from '@/db/database';
 import type { Page } from '@/types/page';
 import type { PageTemplate,PaperColor } from '@/types/notebook';
 type PageRow={id:string;notebook_id:string;position:number;template:PageTemplate;paper_color:PaperColor;content:string;thumbnail_path:string|null;created_at:string;updated_at:string};
@@ -9,7 +9,7 @@ export const pageRepository={
  async getByNotebook(notebookId:string){const db=await getDatabase();const rows=await db.getAllAsync<PageRow>('SELECT * FROM pages WHERE notebook_id=? ORDER BY position',notebookId);return rows.map(convert);},
  async add(notebookId:string,afterPosition?:number){
   const db=await getDatabase(),id=Crypto.randomUUID(),date=now();
-  await db.withExclusiveTransactionAsync(async tx=>{
+  await withSafeTransaction(db,async tx=>{
    const notebook=await tx.getFirstAsync<{template:PageTemplate;paper_color:PaperColor}>('SELECT template,paper_color FROM notebooks WHERE id=?',notebookId);
    if(!notebook)throw new Error('Defter bulunamadı');
    const count=await tx.getFirstAsync<{n:number}>('SELECT COUNT(*) AS n FROM pages WHERE notebook_id=?',notebookId);
@@ -20,7 +20,7 @@ export const pageRepository={
   });return id;
  },
  async remove(pageId:string){
-  const db=await getDatabase();await db.withExclusiveTransactionAsync(async tx=>{
+  const db=await getDatabase();await withSafeTransaction(db,async tx=>{
    const row=await tx.getFirstAsync<{notebook_id:string}>('SELECT notebook_id FROM pages WHERE id=?',pageId);if(!row)throw new Error('Sayfa bulunamadı');
    const count=await tx.getFirstAsync<{n:number}>('SELECT COUNT(*) AS n FROM pages WHERE notebook_id=?',row.notebook_id);
    if((count?.n??0)<=1)throw new Error('Defterin son sayfası silinemez');
@@ -31,7 +31,7 @@ export const pageRepository={
   });
  },
  async move(pageId:string,newPosition:number){
-  const db=await getDatabase();await db.withExclusiveTransactionAsync(async tx=>{
+  const db=await getDatabase();await withSafeTransaction(db,async tx=>{
    const row=await tx.getFirstAsync<{notebook_id:string}>('SELECT notebook_id FROM pages WHERE id=?',pageId);if(!row)throw new Error('Sayfa bulunamadı');
    const pages=await tx.getAllAsync<{id:string}>('SELECT id FROM pages WHERE notebook_id=? ORDER BY position',row.notebook_id);
    const from=pages.findIndex(p=>p.id===pageId);if(from<0)return;
@@ -40,9 +40,9 @@ export const pageRepository={
    await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=?',now(),row.notebook_id);
   });
  },
- async updateContent(pageId:string,content:string){const db=await getDatabase(),date=now();await db.withExclusiveTransactionAsync(async tx=>{await tx.runAsync('UPDATE pages SET content=?,updated_at=? WHERE id=?',content,date,pageId);await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=(SELECT notebook_id FROM pages WHERE id=?)',date,pageId)})},
+ async updateContent(pageId:string,content:string){const db=await getDatabase(),date=now();await withSafeTransaction(db,async tx=>{await tx.runAsync('UPDATE pages SET content=?,updated_at=? WHERE id=?',content,date,pageId);await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=(SELECT notebook_id FROM pages WHERE id=?)',date,pageId)})},
  async updateTemplate(pageId:string,template:PageTemplate,paperColor:PaperColor){
-  const db=await getDatabase(),date=now();await db.withExclusiveTransactionAsync(async tx=>{
+  const db=await getDatabase(),date=now();await withSafeTransaction(db,async tx=>{
    await tx.runAsync('UPDATE pages SET template=?,paper_color=?,updated_at=? WHERE id=?',template,paperColor,date,pageId);
    await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=(SELECT notebook_id FROM pages WHERE id=?)',date,pageId);
   });
