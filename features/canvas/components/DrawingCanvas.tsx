@@ -97,6 +97,8 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const draft=useSharedValue(''),baseZoom=useSharedValue(1),baseX=useSharedValue(0),baseY=useSharedValue(0),pinchX=useSharedValue(0),pinchY=useSharedValue(0);
  const samples=useSharedValue<Sample[]>([]),blocked=useSharedValue(false),drawing=useSharedValue(false);
  const dragX=useSharedValue(0),dragY=useSharedValue(0),draggingSelection=useSharedValue(false);
+ const dragPending=useSharedValue(false);
+ const selectedHit=useSharedValue(false);
  const selectedElements=useMemo(()=>content.elements.filter(e=>selectedIds.includes(e.id)),[content,selectedIds]);
  const selectedBounds=useMemo(()=>{
   if(!selectedElements.length)return null;
@@ -105,12 +107,19 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const selectionBoundsValue=useSharedValue<readonly [number,number,number,number]|null>(null);
  useEffect(()=>{selectionBoundsValue.value=selectedBounds;},[selectedBounds]);
  const dragTransform=useDerivedValue(()=>[{translateX:dragX.value},{translateY:dragY.value}]);
+ const selectAt=(x:number,y:number)=>{
+  const margin=16/fitWidth;
+  const hit=[...content.elements].reverse().find(e=>x>=e.bbox[0]-margin&&x<=e.bbox[2]+margin&&y>=e.bbox[1]-margin&&y<=e.bbox[3]+margin);
+  if(hit){setSelectedIds([hit.id]);onSelectionChange?.([hit.id]);}
+ };
  const commitSelectionMove=(dx:number,dy:number)=>{
   if(Math.hypot(dx,dy)<0.1)return;
   const ids=new Set(selectedRef.current);
   if(!ids.size)return;
+  dragPending.value=true;
   onChange(withHeight(content.elements.map(e=>ids.has(e.id)?moveElement(e,dx,dy):e)));
  };
+ useEffect(()=>{if(dragPending.value){dragX.value=0;dragY.value=0;dragPending.value=false}},[content]);
  const selectionStart=useSharedValue<Sample|null>(null);
  const downTime=useSharedValue(0),startX=useSharedValue(0),startY=useSharedValue(0);
  const originX=useDerivedValue(()=>(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value);
@@ -184,10 +193,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(tool==='select'){
    const p=pagePoint(e.x,e.y),b=selectionBoundsValue.value;
    const margin=12/(fitWidth*zoom.value);
-   if(b&&p[0]>=b[0]-margin&&p[0]<=b[2]+margin&&p[1]>=b[1]-margin&&p[1]<=b[3]+margin){
-    draggingSelection.value=true;dragX.value=0;dragY.value=0;
-    drawing.value=true;runOnJS(notify)(true);return;
-   }
+   selectedHit.value=!!(b&&p[0]>=b[0]-margin&&p[0]<=b[2]+margin&&p[1]>=b[1]-margin&&p[1]<=b[3]+margin);
   }
   samples.value=[pagePoint(e.x,e.y)];drawing.value=false;draft.value='';
   if(tool==='eraser'){
@@ -224,12 +230,22 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    const dx=dragX.value,dy=dragY.value;
    draggingSelection.value=false;
    if(!blocked.value&&Math.hypot(dx,dy)>0.1)runOnJS(commitSelectionMove)(dx,dy);
-   dragX.value=0;dragY.value=0;drawing.value=false;
+   if(!dragPending.value){dragX.value=0;dragY.value=0;}
+   drawing.value=false;
    runOnJS(notify)(false);return;
   }
   if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;cursorOn.value=false;runOnJS(notify)(false);
- }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false}).runOnJS(false);
+ }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false;selectedHit.value=false}).runOnJS(false);
+ const hold=Gesture.LongPress().minDuration(320).maxDistance(14).onStart(e=>{
+  if(tool!=='select'||blocked.value)return;
+  const p=pagePoint(e.x,e.y);
+  // Select the topmost shape at the touch position before allowing a drag.
+  runOnJS(selectAt)(p[0],p[1]);
+  draggingSelection.value=true;
+  dragX.value=0;dragY.value=0;
+  drawing.value=true;runOnJS(notify)(true);
+ }).onEnd(()=>{draggingSelection.value=false;}).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(()=>{blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value;pinchX.value=0;pinchY.value=0}).onUpdate(e=>{
   const z=Math.max(minZoom,Math.min(5,baseZoom.value*e.scale));
   if(pinchX.value===0&&pinchY.value===0){pinchX.value=e.focalX;pinchY.value=e.focalY}
@@ -239,7 +255,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const z=zoom.value<1.5?2.5:1;
   zoom.value=z;offsetX.value=0;offsetY.value=0;
  });
- const gestures=Gesture.Simultaneous(pan,pinch,doubleTap);
+ const gestures=Gesture.Simultaneous(pan,hold,pinch,doubleTap);
 
  return <View onLayout={layout} style={{flex:1,overflow:'hidden',backgroundColor:paperColor==='krem'?'#FFF5DF':'#FFFFFF'}}>
  <GestureDetector gesture={gestures}><View style={{flex:1}}><Canvas style={{flex:1}}>
