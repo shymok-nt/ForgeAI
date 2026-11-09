@@ -14,7 +14,7 @@ export type Brush={color:string;width:number;opacity:number};
 type Sample=[number,number,number];
 type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;shapeKind?:ShapeKind;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}};
 const Completed=memo(function Completed({content,view}:{content:PageContent;view:[number,number,number,number]}){
- const paths=useMemo(()=>content.elements.filter(s=>{const b=s.bbox;return b[2]>=view[0]&&b[0]<=view[2]&&b[3]>=view[1]&&b[1]<=view[3]}).map(s=>({element:s,path:s.type==='stroke'?strokePath(s):shapePath(s)})).sort((a,b)=>(a.element.tool==='highlighter'?0:1)-(b.element.tool==='highlighter'?0:1)),[content,view[0],view[1],view[2],view[3]]);
+ const paths=useMemo(()=>content.elements.filter(s=>{const b=s.bbox;return b[2]>=view[0]&&b[0]<=view[2]&&b[3]>=view[1]&&b[1]<=view[3]}).map(s=>({element:s,path:s.type==='stroke'?strokePath(s):shapePath(s)})).sort((a,b)=>((a.element.type==='stroke'&&a.element.tool==='highlighter')?0:1)-((b.element.type==='stroke'&&b.element.tool==='highlighter')?0:1)),[content,view[0],view[1],view[2],view[3]]);
  return <>{paths.map(({element,path})=>element.type==='stroke'?<Path key={element.id} path={path} color={element.color} opacity={element.opacity} blendMode={element.tool==='highlighter'?'multiply':'srcOver'}/>:<React.Fragment key={element.id}>{element.fill&&<Path path={path} color={element.fill.color} opacity={element.fill.opacity} style="fill"/>}<Path path={path} color={element.stroke.color} opacity={element.stroke.opacity} style="stroke" strokeWidth={element.stroke.width}/></React.Fragment>)}</>;
 });
 export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,onChange,onDrawingActive,shapeKind='rect',shapeFill=false,onSelectionChange,selectionAction}:Props){
@@ -62,7 +62,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const shape=makeShape(shapeKind,first[0],first[1],w,h,brush.color,brush.width,brush.opacity,shapeFill);shape.z=content.elements.length;
   onChange({v:2,elements:[...content.elements,shape]});return;
  }
- if(tool==='eraser'){const hits=new Set<string>();for(const p of points)for(const s of content.elements)if(strokeHit(s,p[0],p[1],eraserSize))hits.add(s.id);if(hits.size)onChange({v:2,elements:content.elements.filter(s=>!hits.has(s.id))});return}
+ if(tool==='eraser'){const hits=new Set<string>();for(const p of points)for(const s of content.elements)if(s.type==='stroke'?strokeHit(s,p[0],p[1],eraserSize):(p[0]>=s.bbox[0]-eraserSize&&p[0]<=s.bbox[2]+eraserSize&&p[1]>=s.bbox[1]-eraserSize&&p[1]<=s.bbox[3]+eraserSize))hits.add(s.id);if(hits.size)onChange({v:2,elements:content.elements.filter(s=>!hits.has(s.id))});return}
   const stroke=makeStroke(points,{tool:tool==='highlighter'?'highlighter':'pen',...brush},Crypto.randomUUID(),content.elements.length);
   onChange({v:2,elements:[...content.elements,stroke]});
  };
