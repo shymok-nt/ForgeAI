@@ -18,7 +18,9 @@ export function makeStroke(samples:Sample[],options:Pick<StrokeElement,'tool'|'c
 export function strokePath(stroke:StrokeElement):SkPath{
  const points:Sample[]=[];for(let i=0;i<stroke.points.length;i+=3)points.push([stroke.points[i],stroke.points[i+1],stroke.points[i+2]]);
  const outline=getStroke(points,{size:stroke.width,thinning:stroke.tool==='pen'?0.55:0,smoothing:0.55,streamline:0.45,simulatePressure:points.every(p=>p[2]===0.5),start:{cap:true,taper:0},end:{cap:true,taper:0}});
- const path=Skia.Path.Make();if(!outline.length)return path;
- path.moveTo(outline[0][0],outline[0][1]);for(let i=1;i<outline.length;i++)path.lineTo(outline[i][0],outline[i][1]);path.close();return path;
+ if(!outline.length)return Skia.Path.Make();
+ const coordinates=outline.map(([x,y])=>[Number(x),Number(y)]);
+ const svg=coordinates.map(([x,y],index)=>`${index===0?'M':'L'}${x} ${y}`).join(' ')+' Z';
+ return Skia.Path.MakeFromSVGString(svg)??Skia.Path.Make();
 }
 export function strokeHit(stroke:StrokeElement,x:number,y:number,radius:number){const b=stroke.bbox;if(x<b[0]-radius||x>b[2]+radius||y<b[1]-radius||y>b[3]+radius)return false;const p:[number,number,number]=[x,y,0.5];for(let i=0;i<stroke.points.length;i+=3){const a:[number,number,number]=[stroke.points[i],stroke.points[i+1],0.5],j=Math.min(i+3,stroke.points.length-3),b:[number,number,number]=[stroke.points[j],stroke.points[j+1],0.5];if(segmentDistance(p,a,b)<radius+stroke.width/2)return true}return false}
