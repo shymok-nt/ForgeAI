@@ -29,7 +29,6 @@ export default function NoteCanvasScreen(){
  const [panel,setPanel]=useState<'tool'|'palette'|null>(null),[sheet,setSheet]=useState(false),[focus,setFocus]=useState(false),[eraserSize,setEraserSize]=useState(24),[eraserMode,setEraserMode]=useState<'pixel'|'stroke'>('pixel');
  const [controller,setController]=useState<CanvasController|null>(null);
  const [shapeKind,setShapeKind]=useState<ShapeMode>('auto'),[shapeFill,setShapeFill]=useState(false),[ruler,setRuler]=useState(false);
- const [transformMode,setTransformMode]=useState(false);
  const [selectedElements,setSelectedElements]=useState<string[]>([]),[selectionAction,setSelectionAction]=useState<{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}>();
  const action=(kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color',value?:number,color?:string)=>setSelectionAction({kind,value,color,version:Date.now()});
  const [recent,setRecent]=useState<string[]>([]);
@@ -44,7 +43,7 @@ export default function NoteCanvasScreen(){
  const chooseTemplate=(pageId:string)=>Alert.alert('Sayfa şablonu','Yeni şablonu seç',templates.map(t=>({text:t,onPress:()=>{const p=pages.find(x=>x.id===pageId);if(p)void changeTemplate(pageId,t,p.paperColor)}})).concat([{text:'Vazgeç' as PageTemplate,onPress:()=>{}}]));
  const pageActions=(pageId:string)=>Alert.alert('Sayfa işlemleri','İşlem seç',[{text:'Şablon',onPress:()=>chooseTemplate(pageId)},{text:'Yukarı taşı',onPress:()=>void move(pageId,Math.max(0,pages.findIndex(p=>p.id===pageId)-1))},{text:'Aşağı taşı',onPress:()=>void move(pageId,Math.min(pages.length-1,pages.findIndex(p=>p.id===pageId)+1))},{text:'Sil',style:'destructive',onPress:()=>askRemove(pageId)},{text:'Vazgeç',style:'cancel'}]);
  const more=()=>Alert.alert('Diğer','Sayfa işlemleri',[{text:'Şablonu değiştir',onPress:()=>selected&&chooseTemplate(selected.id)},{text:'Sayfa ekle',onPress:()=>void addPage()},{text:'Sayfalar',onPress:()=>setSheet(true)},{text:'Cetvel aç/kapat',onPress:()=>setRuler(v=>!v)},{text:'Odak modu',onPress:()=>setFocus(v=>!v)},{text:'Defteri düzenle',onPress:()=>router.push({pathname:'/notebook-editor',params:{id}})},{text:'Vazgeç',style:'cancel'}]);
- const chooseTool=(t:Tool)=>{if(t!=='select')setTransformMode(false);if(tool===t)setPanel(p=>p==='tool'?null:'tool');else{setTool(t);setPanel(null)}};
+ const chooseTool=(t:Tool)=>{if(tool===t)setPanel(p=>p==='tool'?null:'tool');else{setTool(t);setPanel(null)}};
  const chooseColor=(color:string)=>{setBrush(b=>({...b,color}));setRecent(r=>[color,...r.filter(x=>x!==color)].slice(0,8))};
  const ink=colors.ink,muted=colors.muted;const backdrop=scheme==='dark'?'#0B0B10':'#EEE9DF';
  const control=(name:string,Icon:typeof ArrowLeft,onPress:()=>void,disabled=false)=> <Pressable accessibilityRole="button" accessibilityLabel={name} accessibilityState={{disabled}} disabled={disabled} onPress={onPress} style={[hit,{opacity:disabled?0.35:1}]}><Icon size={22} color={ink}/></Pressable>;
@@ -69,29 +68,19 @@ export default function NoteCanvasScreen(){
  <View style={{flex:1,flexDirection:'row'}}>
  {tablet&&!focus&&<View style={{width:132,backgroundColor:colors.background,borderRightWidth:1,borderRightColor:colors.divider}}><CanvasPageStrip tablet pages={pages} selectedId={selected?.id} colors={colors} onSelect={select} onAdd={()=>void addPage()} onRemove={askRemove} onMove={(p,i)=>void move(p,i)} onActions={pageActions}/></View>}
  <View style={{flex:1,marginHorizontal:0,marginTop:0,marginBottom:0,borderRadius:0,overflow:'hidden'}}>
- {selected?<CanvasPage key={selected.id} page={selected} tool={tool} brush={brush} eraserSize={eraserSize} eraserMode={eraserMode} onController={setController} onHistory={()=>{}} onDrawStart={()=>setPanel(null)} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={setSelectedElements} selectionAction={selectionAction} transformMode={transformMode}/>:<Text style={{color:ink}}>Sayfalar yükleniyor…</Text>}
+ {selected?<CanvasPage key={selected.id} page={selected} tool={tool} brush={brush} eraserSize={eraserSize} eraserMode={eraserMode} onController={setController} onHistory={()=>{}} onDrawStart={()=>setPanel(null)} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={setSelectedElements} selectionAction={selectionAction}/>:<Text style={{color:ink}}>Sayfalar yükleniyor…</Text>}
  </View>
  <View pointerEvents="none" style={{position:'absolute',bottom:tablet?22:110,right:24,backgroundColor:'#1B1B2FBB',borderRadius:20,paddingHorizontal:12,paddingVertical:7}}><Text style={{color:'#FFFFFF',fontSize:12}}>{index+1} / {pages.length}</Text></View>
  {focus&&<Pressable accessibilityRole="button" accessibilityLabel="Araç çubuklarını göster" onPress={()=>setFocus(false)} style={{position:'absolute',top:0,left:0,right:0,height:44,alignItems:'center',justifyContent:'center'}}><Eye color={colors.accent} size={20}/></Pressable>}
  {!tablet&&!focus&&<View style={{position:'absolute',bottom:28,left:12,right:12}}><CanvasToolbar tablet={false} tool={tool} colors={colors} onTool={chooseTool} onPages={()=>setSheet(true)}/></View>}
- {tool==='select'&&selectedElements.length>0&&<View style={{position:'absolute',top:10,left:12,right:12,zIndex:25,backgroundColor:colors.surfaceRaised,borderRadius:18,paddingHorizontal:12,paddingVertical:10,borderWidth:1,borderColor:colors.divider,shadowColor:'#000',shadowOpacity:0.12,shadowRadius:14,elevation:8}}>
- <View style={{flexDirection:'row',alignItems:'center',gap:10}}>
-  <Pressable accessibilityRole="button" accessibilityLabel="İki parmakla taşıma, döndürme ve boyutlandırma" accessibilityState={{selected:transformMode}} onPress={()=>setTransformMode(v=>!v)} style={{flex:1,minHeight:48,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:10,paddingHorizontal:12,borderRadius:13,backgroundColor:transformMode?colors.accent:colors.background,borderWidth:1,borderColor:transformMode?colors.accent:colors.divider}}>
-   <Move size={21} color={transformMode?'#FFFFFF':colors.accent}/>
-   <Text style={{fontFamily:fonts.semibold,fontSize:13,color:transformMode?'#FFFFFF':ink}}>{transformMode?'Dönüştürme açık':'Taşı ve dönüştür'}</Text>
-  </Pressable>
-  <Pressable accessibilityRole="button" accessibilityLabel="Çoğalt" onPress={()=>action('duplicate')} style={{width:46,height:48,alignItems:'center',justifyContent:'center',borderRadius:12,backgroundColor:colors.background}}><Copy size={20} color={ink}/></Pressable>
-  <Pressable accessibilityRole="button" accessibilityLabel="Sil" onPress={()=>action('delete')} style={{width:46,height:48,alignItems:'center',justifyContent:'center',borderRadius:12,backgroundColor:colors.coral+'16'}}><Trash2 size={20} color={colors.coral}/></Pressable>
- </View>
- {transformMode&&<Text style={{textAlign:'center',fontFamily:fonts.body,color:muted,fontSize:11,marginTop:8}}>İki parmakla taşı · Yaklaştırarak boyutlandır · Çevirerek döndür</Text>}
- </View>}
+
  {ruler&&<View pointerEvents="none" style={{position:'absolute',top:'45%',left:'15%',width:'70%',height:64,backgroundColor:colors.accent+'55',borderWidth:1,borderColor:colors.accent,borderRadius:6,justifyContent:'center',alignItems:'center'}}><Text style={{color:ink}}>0°   | | | | | | | | | | | |</Text></View>}
  {popover}
  </View>
  <Modal visible={sheet} transparent animationType="slide" onRequestClose={()=>setSheet(false)}><View style={{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay}}><View style={{backgroundColor:colors.surfaceRaised,borderTopLeftRadius:24,borderTopRightRadius:24,paddingBottom:28,maxHeight:height*0.65}}><View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingHorizontal:16,paddingTop:12}}><Text style={{fontFamily:fonts.heading,fontSize:20,color:ink}}>Sayfalar</Text>{control('Kapat',X,()=>setSheet(false))}</View><CanvasPageStrip tablet={false} pages={pages} selectedId={selected?.id} colors={colors} onSelect={select} onAdd={()=>void addPage()} onRemove={askRemove} onMove={(p,i)=>void move(p,i)} onActions={pageActions}/></View></View></Modal>
  </SafeAreaView>;
 }
-function CanvasPage({page,tool,brush,eraserSize,eraserMode,onController,onHistory,onDrawStart,shapeKind,shapeFill,onSelectionChange,selectionAction,transformMode}:{page:Page;tool:Tool;brush:Brush;eraserSize:number;eraserMode:'pixel'|'stroke';onController:(value:CanvasController|null)=>void;onHistory:()=>void;onDrawStart:()=>void;shapeKind:ShapeMode;shapeFill:boolean;onSelectionChange:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number};transformMode:boolean}){
+function CanvasPage({page,tool,brush,eraserSize,eraserMode,onController,onHistory,onDrawStart,shapeKind,shapeFill,onSelectionChange,selectionAction}:{page:Page;tool:Tool;brush:Brush;eraserSize:number;eraserMode:'pixel'|'stroke';onController:(value:CanvasController|null)=>void;onHistory:()=>void;onDrawStart:()=>void;shapeKind:ShapeMode;shapeFill:boolean;onSelectionChange:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}}){
  useKeepAwake();const [content,setContent]=useState<PageContent>(()=>parseContent(page.content));
  const {error,saving,retry,flush,setDrawingActive}=useAutosave(page.id,content);
  const change=(next:PageContent)=>{record(page.id,content);setContent(next);onHistory()};
@@ -101,5 +90,5 @@ function CanvasPage({page,tool,brush,eraserSize,eraserMode,onController,onHistor
  const controller:CanvasController={back,forward,flush,canUndo:h.canUndo,canRedo:h.canRedo,error,saving,retry};
  useEffect(()=>{onController(controller)},[error,saving,h.canUndo,h.canRedo]);
  useEffect(()=>()=>{void flush();onController(null)},[]);
- return <DrawingCanvas content={content} template={page.template} paperColor={page.paperColor} tool={tool} brush={tool==='highlighter'?{...brush,width:brush.width*5}:brush} eraserSize={eraserSize} eraserMode={eraserMode} onChange={change} onDrawingActive={setDrawingActive} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={onSelectionChange} selectionAction={selectionAction} transformMode={transformMode}/>;
+ return <DrawingCanvas content={content} template={page.template} paperColor={page.paperColor} tool={tool} brush={tool==='highlighter'?{...brush,width:brush.width*5}:brush} eraserSize={eraserSize} eraserMode={eraserMode} onChange={change} onDrawingActive={setDrawingActive} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={onSelectionChange} selectionAction={selectionAction}/>;
 }
