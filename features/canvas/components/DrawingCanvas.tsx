@@ -143,6 +143,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const gestureDX=useSharedValue(0),gestureDY=useSharedValue(0);
  // Keep the preview pose until the final shape is mounted on release.
  const selectionPreviewLive=useSharedValue(false);
+ const selectionOpacity=useSharedValue(1);
  const transformActive=useSharedValue(false),transformPending=useSharedValue(false);
  const [handoff,setHandoff]=useState<{elements:Element[];bounds:readonly [number,number,number,number];rotation:number;dx:number;dy:number;scale:number;angle:number}|null>(null);
  const pendingHandoff=useRef(false);
@@ -216,6 +217,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const finalFrame=selectionFrame(finalElements);
   if(!finalFrame)return;
   pendingHandoff.current=true;
+  selectionOpacity.value=0;
   setHandoff({elements:finalElements,bounds:finalFrame.bounds,rotation:finalFrame.rotation,dx:0,dy:0,scale:1,angle:0});
   onChange(withHeight(next));
  };
@@ -250,6 +252,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const finalFrame=selectionFrame(finalElements);
   if(!finalFrame)return;
   pendingHandoff.current=true;
+  selectionOpacity.value=0;
   setHandoff({elements:finalElements,bounds:finalFrame.bounds,rotation:finalFrame.rotation,dx:0,dy:0,scale:1,angle:0});
   onChange(withHeight(next));
  };
@@ -257,11 +260,13 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  // Reset worklet transforms only after that group has switched to final geometry.
  useLayoutEffect(()=>{
   if(!handoff)return;
+  // Prevent an old preview and the new path from appearing in the same frame.
   selectionPreviewLive.value=false;
   dragX.value=0;dragY.value=0;dragPending.value=false;
   gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
   transformPending.value=false;
-  
+  const frame=requestAnimationFrame(()=>{selectionOpacity.value=1;});
+  return ()=>cancelAnimationFrame(frame);
  },[handoff]);
  // Keep the committed geometry mounted as the selected shape's baseline.
  // Removing the handoff after React's commit caused a second Skia scene
@@ -530,7 +535,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
- {tool==='select'&&(handoffBounds||selectedBounds)&&<Group transform={selectionTransform}>
+ {tool==='select'&&(handoffBounds||selectedBounds)&&<Group transform={selectionTransform} opacity={selectionOpacity}>
   {baselineElements.map(element=><StrokeLayer key={element.id} element={element}/>)}
   {(()=>{
    const bounds=handoffBounds??selectedBounds!;
