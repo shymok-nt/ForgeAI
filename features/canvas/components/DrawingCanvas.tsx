@@ -16,7 +16,22 @@ export type Brush={color:string;width:number;opacity:number};
 type Sample=[number,number,number];
 type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number};transformMode?:boolean};
 const PAPER_STEP=80;
+const normalizeShapeSize=(kind:string,w:number,h:number):[number,number]=>{ 'worklet';
+ if(kind==='triangle'){
+  const side=Math.max(Math.abs(w),Math.abs(h)*2/Math.sqrt(3));
+  return [Math.sign(w||1)*side,Math.sign(h||1)*side*Math.sqrt(3)/2];
+ }
+ if((kind==='rect'||kind==='ellipse')&&Math.min(Math.abs(w),Math.abs(h))/Math.max(1,Math.abs(w),Math.abs(h))>=0.76){
+  const side=(Math.abs(w)+Math.abs(h))/2;
+  return [Math.sign(w||1)*side,Math.sign(h||1)*side];
+ }
+ return [w,h];
+};
 const previewShape=(kind:string,x0:number,y0:number,x1:number,y1:number):string=>{ 'worklet';
+ if(kind==='triangle'||kind==='rect'||kind==='ellipse'){
+  const size=normalizeShapeSize(kind,x1-x0,y1-y0);
+  x1=x0+size[0];y1=y0+size[1];
+ }
  const l=Math.min(x0,x1),r=Math.max(x0,x1),t=Math.min(y0,y1),b=Math.max(y0,y1);
  if(kind==='line'||kind==='arrow'){
   let s='M '+x0+' '+y0+' L '+x1+' '+y1;
@@ -148,7 +163,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   dragPending.value=true;
   onChange(withHeight(content.elements.map(e=>ids.has(e.id)?moveElement(e,dx,dy):e)));
  };
- useEffect(()=>{if(dragPending.value){dragX.value=0;dragY.value=0;dragPending.value=false}},[content]);
+ useLayoutEffect(()=>{if(dragPending.value){dragX.value=0;dragY.value=0;dragPending.value=false}},[content]);
  const commitGesture=(dx:number,dy:number,scale:number,angle:number)=>{
   const ids=new Set(selectedRef.current);
   if(!ids.size)return;
@@ -176,7 +191,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   transformPending.value=true;
   onChange(withHeight(next));
  };
- useEffect(()=>{
+ useLayoutEffect(()=>{
   if(transformPending.value){
    gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
    transformPending.value=false;
@@ -223,7 +238,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }else{
    let w=last[0]-first[0],h=last[1]-first[1];
    if(Math.hypot(w,h)<8){draft.value='';awaitingCommit.value=false;return}
-   if(Math.abs(Math.abs(w)-Math.abs(h))/Math.max(1,Math.abs(w),Math.abs(h))<0.05){h=Math.sign(h||1)*Math.abs(w)}
+   [w,h]=normalizeShapeSize(shapeKind,w,h);
    const shape=makeShape(shapeKind,first[0],first[1],w,h,brush.color,brush.width,brush.opacity,shapeFill);shape.z=content.elements.length;
    onChange(withHeight([...content.elements,shape],shape.bbox[3]+400));return;
   }
