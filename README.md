@@ -57,3 +57,13 @@ Not: Daha önceki sürümde defterler yalnızca bellekte tutuluyordu. Bu eski ot
 `folderRepository` klasör oluşturma, yeniden adlandırma, silme ve sıralama işlemlerini SQLite'da yapar. Klasör silindiğinde `ON DELETE SET NULL` sayesinde defterler korunur ve Klasörsüz grubuna geçer. `FolderChips` klasörleri Zustand'daki SQLite'dan yüklenmiş listeden alır.
 
 `app/search.tsx` defter başlıklarını bellekte 200 ms gecikmeyle filtreler. `utils/search.ts` Türkçe harfleri ve aksanları normalleştirir. En fazla 8 son arama `settings.recentSearches` içinde JSON olarak saklanır. Sayfa içeriğinde arama yapılmaz.
+
+## Çizim motoru — Parça 1 (geliştirme sürümü)
+
+`features/canvas/types.ts` sayfa boyutunu 1000 × 1414 olarak sabitler. İçerik `{ "v": 2, "elements": [...] }` biçiminde `pages.content` sütununda saklanır. `stroke` elemanı UUID, z sırası, oluşturma tarihi, kalem türü, renk, genişlik, opaklık, düzleştirilmiş [x,y,pressure] nokta dizisi ve bbox içerir. Yeni eleman türleri için `Element` birleşimine yeni bir tür eklenip renderer'a karşılık gelen çizici eklenmelidir.
+
+Render sırası: Skia Canvas üzerinde kâğıt/şablon, bbox ile filtrelenen kalıcı stroke path'leri ve aktif stroke. Path geometrisi `perfect-freehand` ile hazırlanır; nokta örnekleri seyreltilir. Her sayfanın undo/redo geçmişi bellekte tutulur (100 işlem). Çizimler SQLite'a 800 ms gecikmeyle ve sayfadan çıkarken yazılır.
+
+Gerekli Expo bağımlılıklarını yerel makinede `npx expo install react-native-gesture-handler react-native-reanimated react-native-worklets expo-haptics expo-keep-awake` ve `npm install perfect-freehand` komutlarıyla SDK sürümüne uygun kurun. Stylus basıncı/eğimi ve gelişmiş palm rejection için Expo Go yerine development build gerekebilir.
+
+**Henüz tamamlanmamış Parça 1 özellikleri:** gerçek stylus basıncı/palm rejection, iki/üç parmak kısayolları, pixel eraser, çoklu preset kalıcılığı, thumbnail üretimi, odak modu, gelişmiş zoom sınırları ve performans testleri. Bu sürüm temel çizim/çizgi silgi/undo-redo/SQLite kayıt iskeletidir; 60 fps veya tüm cihazlarda sorunsuz çalıştığı doğrulanmamıştır.
