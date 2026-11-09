@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import { getDatabase } from '@/db/database';
+import { getDatabase,withSafeTransaction } from '@/db/database';
 import { copyCoverFile,deleteCoverFile,resolveCoverUri } from '@/utils/files';
 import type { NotebookDraft,PageTemplate,PaperColor } from '@/types/notebook';
 export type NotebookRow={
@@ -16,7 +16,7 @@ export const notebookRepository={
  async getById(id:string){const db=await getDatabase();return db.getFirstAsync<NotebookRow>(`${select} AND n.id=? GROUP BY n.id`,id);},
  async create(input:NotebookInput){
   const db=await getDatabase(),id=Crypto.randomUUID(),date=now(),pageId=Crypto.randomUUID();
-  await db.withExclusiveTransactionAsync(async tx=>{
+  await withSafeTransaction(db,async tx=>{
    await tx.runAsync(`INSERT INTO notebooks(id,title,folder_id,cover_type,cover_color,cover_image_path,cover_preset_id,show_title_on_cover,template,paper_color,favorite,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?,?,?,?,0,?,?,NULL)`,id,...rowParams(input),date,date);
    await tx.runAsync('INSERT INTO pages(id,notebook_id,position,template,paper_color,created_at,updated_at) VALUES(?,?,0,?,?,?,?)',pageId,id,input.template,input.paperColor,date,date);
   });return id;
@@ -35,7 +35,7 @@ export const notebookRepository={
  },
  async remove(id:string){
   const db=await getDatabase();const row=await this.getById(id);if(!row)return;
-  await db.withExclusiveTransactionAsync(async tx=>{await tx.runAsync('DELETE FROM notebooks WHERE id=?',id)});
+  await withSafeTransaction(db,async tx=>{await tx.runAsync('DELETE FROM notebooks WHERE id=?',id)});
   if(row.cover_image_path){const used=await db.getFirstAsync<{n:number}>('SELECT COUNT(*) AS n FROM notebooks WHERE cover_image_path=?',row.cover_image_path);if(!used?.n)deleteCoverFile(row.cover_image_path);}
  },
  async duplicate(id:string){
@@ -43,7 +43,7 @@ export const notebookRepository={
   const newId=Crypto.randomUUID(),date=now();
   const newPath=original.cover_image_path?await copyCoverFile(resolveCoverUri(original.cover_image_path)!):null;
   try{
-   await db.withExclusiveTransactionAsync(async tx=>{
+   await withSafeTransaction(db,async tx=>{
     await tx.runAsync(`INSERT INTO notebooks(id,title,folder_id,cover_type,cover_color,cover_image_path,cover_preset_id,show_title_on_cover,template,paper_color,favorite,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,newId,original.title+' kopyası',original.folder_id,original.cover_type,original.cover_color,newPath,original.cover_preset_id,original.show_title_on_cover,original.template,original.paper_color,original.favorite,date,date);
     const pages=await tx.getAllAsync<{position:number;template:string;paper_color:string;content:string;thumbnail_path:string|null}>('SELECT position,template,paper_color,content,thumbnail_path FROM pages WHERE notebook_id=? ORDER BY position',id);
     for(const page of pages)await tx.runAsync('INSERT INTO pages(id,notebook_id,position,template,paper_color,content,thumbnail_path,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)',Crypto.randomUUID(),newId,page.position,page.template,page.paper_color,page.content,null,date,date);
