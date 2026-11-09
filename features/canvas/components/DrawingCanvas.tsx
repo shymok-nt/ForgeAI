@@ -590,7 +590,9 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   pinchPageX.value=(e.focalX-originX.value)/(fitWidth*zoom.value);
   pinchPageY.value=(e.focalY-originY.value)/(fitWidth*zoom.value);
  }).onUpdate(e=>{
-  if(imageGestureLocked.value){imageScale.value=Math.max(0.15,Math.min(8,e.scale));imageFocalDX.value=(e.focalX-imageFocalX.value)/(fitWidth*zoom.value);imageFocalDY.value=(e.focalY-imageFocalY.value)/(fitWidth*zoom.value);return;}
+  if(imageGestureLocked.value){// Resize and rotate around the image's fixed center. Finger midpoint drift
+   // must not translate the image; moving it is handled by the one-finger pan.
+   imageScale.value=Math.max(0.15,Math.min(8,e.scale));imageFocalDX.value=0;imageFocalDY.value=0;return;}
   if(tool==='select'&&selectionBoundsValue.value){
    gestureScale.value=Math.max(0.15,Math.min(8,e.scale));
    gestureDX.value=(e.focalX-gestureFocalX.value)/(fitWidth*zoom.value);
