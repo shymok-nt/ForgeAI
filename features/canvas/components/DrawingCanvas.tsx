@@ -23,16 +23,16 @@ const cachedPath=(element:Element)=>{
  if(pathCache.size>2500){for(const id of Array.from(pathCache.keys()).slice(0,500))pathCache.delete(id)}
  return path;
 };
-const StaticPaper=memo(function StaticPaper({template,paperColor}:{template:PageTemplate;paperColor:PaperColor}){
+const StaticPaper=memo(function StaticPaper({template,paperColor,pageHeight}:{template:PageTemplate;paperColor:PaperColor;pageHeight:number}){
  const lines=useMemo(()=>{
   const items:{x1:number;y1:number;x2:number;y2:number}[]=[];
-  if(template==='çizgili'||template==='kareli')for(let y=56;y<PAGE_HEIGHT;y+=42)items.push({x1:0,y1:y,x2:PAGE_WIDTH,y2:y});
+  if(template==='çizgili'||template==='kareli')for(let y=56;y<pageHeight;y+=42)items.push({x1:0,y1:y,x2:PAGE_WIDTH,y2:y});
   if(template==='kareli')for(let x=42;x<PAGE_WIDTH;x+=42)items.push({x1:x,y1:0,x2:x,y2:PAGE_HEIGHT});
   return items;
- },[template]);
- const dots=useMemo(()=>template==='noktalı'?Array.from({length:Math.floor(PAGE_HEIGHT/42)*Math.floor(PAGE_WIDTH/42)},(_,i)=>{const cols=Math.floor(PAGE_WIDTH/42);return [i%cols*42+21,Math.floor(i/cols)*42+21] as const}):[],[template]);
+ },[template,pageHeight]);
+ const dots=useMemo(()=>template==='noktalı'?Array.from({length:Math.floor(pageHeight/42)*Math.floor(PAGE_WIDTH/42)},(_,i)=>{const cols=Math.floor(PAGE_WIDTH/42);return [i%cols*42+21,Math.floor(i/cols)*42+21] as const}):[],[template,pageHeight]);
  return <>
-  <Rect x={0} y={0} width={PAGE_WIDTH} height={PAGE_HEIGHT} color={paperColor==='krem'?'#FFF5DF':'#FFFFFF'}/>
+  <Rect x={0} y={0} width={PAGE_WIDTH} height={pageHeight} color={paperColor==='krem'?'#FFF5DF':'#FFFFFF'}/>
   {lines.map((l,i)=><Line key={i} p1={vec(l.x1,l.y1)} p2={vec(l.x2,l.y2)} color="#D8DFEE" strokeWidth={1.2}/>)}
   {dots.map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={1.5} color="#D8DFEE"/>)}
  </>;
@@ -55,12 +55,14 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  if(selectionAction.kind==='scale')next=next.map(e=>ids.has(e.id)?scaleElement(e,(e.bbox[0]+e.bbox[2])/2,(e.bbox[1]+e.bbox[3])/2,selectionAction.value??1.1,selectionAction.value??1.1):e);
  if(selectionAction.kind==='rotate')next=next.map(e=>ids.has(e.id)?rotateElement(e,(e.bbox[0]+e.bbox[2])/2,(e.bbox[1]+e.bbox[3])/2,selectionAction.value??Math.PI/12):e);
  if(selectionAction.kind==='color')next=next.map(e=>ids.has(e.id)?e.type==='stroke'?{...e,color:selectionAction.color??e.color}:{...e,stroke:{...e.stroke,color:selectionAction.color??e.stroke.color}}:e);
- if(next!==content.elements){onChange({v:2,elements:next});if(selectionAction.kind==='delete'){setSelectedIds([]);onSelectionChange?.([])}}
+ if(next!==content.elements){onChange(withHeight(next));if(selectionAction.kind==='delete'){setSelectedIds([]);onSelectionChange?.([])}}
  },[selectionAction?.version]);
  const [size,setSize]=useState({width:300,height:450});
  const fitWidth=Math.max(0.01,size.width/PAGE_WIDTH);
- const fitAll=Math.max(0.01,Math.min(fitWidth,(size.height-4)/PAGE_HEIGHT));
- const minZoom=Math.max(0.1,fitAll/fitWidth*0.8);
+ const pageHeight=Math.max(PAGE_HEIGHT,content.h??PAGE_HEIGHT,Math.ceil(size.height/fitWidth));
+ const withHeight=(elements:Element[],minimum=pageHeight):PageContent=>({v:2,elements,h:Math.max(pageHeight,minimum)});
+ const fitAll=Math.max(0.01,Math.min(fitWidth,size.height/pageHeight));
+ const minZoom=0.8;
  const zoom=useSharedValue(1),offsetX=useSharedValue(0),offsetY=useSharedValue(0);
  const awaitingCommit=useSharedValue(false);
  const draft=useSharedValue(''),baseZoom=useSharedValue(1),baseX=useSharedValue(0),baseY=useSharedValue(0);
@@ -68,15 +70,14 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const selectionStart=useSharedValue<Sample|null>(null);
  const downTime=useSharedValue(0),startX=useSharedValue(0),startY=useSharedValue(0);
  const originX=useDerivedValue(()=>(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value);
- const originY=useDerivedValue(()=>size.height>PAGE_HEIGHT*fitWidth*zoom.value?(size.height-PAGE_HEIGHT*fitWidth*zoom.value)/2+offsetY.value:offsetY.value);
+ const originY=useDerivedValue(()=>offsetY.value);
  const transform=useDerivedValue(()=>[{translateX:originX.value},{translateY:originY.value},{scale:fitWidth*zoom.value}]);
  const clamp=useCallback((z:number,x:number,y:number):[number,number]=>{ 'worklet';
-  const pw=PAGE_WIDTH*fitWidth*z,ph=PAGE_HEIGHT*fitWidth*z;
-  const limitX=Math.max(0,(pw-size.width)/2+32);
-  const baseY=ph<size.height?(size.height-ph)/2:0;
-  const minY=Math.min(0,size.height-ph-32)-baseY,maxY=32-baseY;
+  const pw=PAGE_WIDTH*fitWidth*z,ph=pageHeight*fitWidth*z;
+  const limitX=Math.max(0,(pw-size.width)/2);
+  const minY=Math.min(0,size.height-ph),maxY=0;
   return [Math.max(-limitX,Math.min(limitX,x)),Math.max(minY,Math.min(maxY,y))];
- },[size.width,size.height,fitWidth]);
+ },[size.width,size.height,fitWidth,pageHeight]);
  const layout=(e:LayoutChangeEvent)=>{const {width,height}=e.nativeEvent.layout;if(width===size.width&&height===size.height)return;setSize({width,height});zoom.value=1;offsetX.value=0;offsetY.value=0};
  const pagePoint=(x:number,y:number):Sample=>{ 'worklet';return [(x-originX.value)/(fitWidth*zoom.value),(y-originY.value)/(fitWidth*zoom.value),0.5]};
  const endStroke=(points:Sample[])=>{if(!points.length)return;
@@ -90,11 +91,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  if(tool==='shape'){
   const first=points[0],last=points[points.length-1];let w=last[0]-first[0],h=last[1]-first[1];if(Math.abs(Math.abs(w)-Math.abs(h))/Math.max(1,Math.abs(w),Math.abs(h))<0.05){h=Math.sign(h||1)*Math.abs(w)}
   const shape=makeShape(shapeKind,first[0],first[1],w,h,brush.color,brush.width,brush.opacity,shapeFill);shape.z=content.elements.length;
-  onChange({v:2,elements:[...content.elements,shape]});return;
+  onChange(withHeight([...content.elements,shape],shape.bbox[3]+400));return;
  }
- if(tool==='eraser'){const next=pixelErase(content.elements,points,eraserSize/2,eraserMode==='stroke');if(next!==content.elements)onChange({v:2,elements:next});else awaitingCommit.value=false;return}
+ if(tool==='eraser'){const next=pixelErase(content.elements,points,eraserSize/2,eraserMode==='stroke');if(next!==content.elements)onChange(withHeight(next));else awaitingCommit.value=false;return}
   const stroke=makeStroke(points,{tool:tool==='highlighter'?'highlighter':'pen',...brush},Crypto.randomUUID(),content.elements.length);
-  onChange({v:2,elements:[...content.elements,stroke]});
+  onChange(withHeight([...content.elements,stroke],stroke.bbox[3]+400));
  };
  const notify=(active:boolean)=>onDrawingActive?.(active);
  const complete=(points:Sample[])=>{endStroke(points);};
@@ -134,7 +135,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  return <View onLayout={layout} style={{flex:1,overflow:'hidden',backgroundColor:paperColor==='krem'?'#FFF5DF':'#FFFFFF'}}>
  <GestureDetector gesture={gestures}><View style={{flex:1}}><Canvas style={{flex:1}}>
  <Group transform={transform}>
- <StaticPaper template={template} paperColor={paperColor}/>
+ <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight}/>
  <Completed content={content}/>
  {selectedIds.length>0&&(()=>{const es=content.elements.filter(e=>selectedIds.includes(e.id));if(!es.length)return null;const b=[Math.min(...es.map(e=>e.bbox[0])),Math.min(...es.map(e=>e.bbox[1])),Math.max(...es.map(e=>e.bbox[2])),Math.max(...es.map(e=>e.bbox[3]))];return <><Rect x={b[0]} y={b[1]} width={b[2]-b[0]} height={b[3]-b[1]} color="#3388EE" style="stroke" strokeWidth={2}/>{[[b[0],b[1]],[b[2],b[1]],[b[0],b[3]],[b[2],b[3]]].map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={7} color="#FFFFFF"/>)}</>})()}
 
