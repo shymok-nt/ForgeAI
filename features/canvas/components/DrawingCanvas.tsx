@@ -354,15 +354,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const singleTap=Gesture.Tap().numberOfTaps(1).maxDuration(250).maxDistance(12).onEnd(e=>{
   if(tool==='select'&&!blocked.value){const p=pagePoint(e.x,e.y);runOnJS(selectAt)(p[0],p[1]);}
  }).runOnJS(false);
- const doubleTap=Gesture.Tap().numberOfTaps(2).onEnd(()=>{
-  if(tool==='select'&&selectionBoundsValue.value)return;
-  const z=zoom.value<1.5?2.5:1;
-  zoom.value=z;offsetX.value=0;offsetY.value=0;
- });
- const gestures=Gesture.Simultaneous(pan,hold,pinch,rotation,Gesture.Exclusive(doubleTap,singleTap));
+ const gestures=Gesture.Simultaneous(pan,hold,pinch,rotation,singleTap);
 
- return <View onLayout={layout} style={{flex:1,overflow:'hidden',backgroundColor:paperColor==='krem'?'#FFF5DF':'#FFFFFF'}}>
- <GestureDetector gesture={gestures}><View style={{flex:1}}><Canvas style={{flex:1}}>
+ return <View onLayout={layout} style={{flex:1,overflow:'hidden',touchAction:'none',backgroundColor:paperColor==='krem'?'#FFF5DF':'#FFFFFF'}}>
+ <GestureDetector gesture={gestures}><View style={{flex:1,touchAction:'none'}}><Canvas style={{flex:1}}>
  <Group transform={transform}>
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
  <Group layer={tool==='eraser'}>
