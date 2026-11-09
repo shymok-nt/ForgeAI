@@ -60,7 +60,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const pts=samples.value;
   draft.value=pts.map((v,i)=>`${i===0?'M':'L'}${v[0]} ${v[1]}`).join(' ');
  }).onEnd(()=>{
-  if(!blocked.value&&tool!=='hand'&&samples.value.length){runOnJS(endStroke)(samples.value)}
+  if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){runOnJS(endStroke)(samples.value)}
   samples.value=[];draft.value='';drawing.value=false;runOnJS(notify)(false);
  }).onFinalize(()=>{samples.value=[];draft.value='';drawing.value=false;blocked.value=false}).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(()=>{blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value}).onUpdate(e=>{
