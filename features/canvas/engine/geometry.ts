@@ -12,10 +12,16 @@ export function simplify(samples:Sample[],threshold=0.9):Sample[]{
  return rdp(filtered);
 }
 export function makeStroke(samples:Sample[],options:Pick<StrokeElement,'tool'|'color'|'width'|'opacity'>,id:string,z:number):StrokeElement{
- const points=simplify(samples).flatMap(p=>p.map(round));const xs=samples.map(p=>p[0]),ys=samples.map(p=>p[1]);const pad=options.width/2;
- return {...options,id,type:'stroke',z,createdAt:new Date().toISOString(),points,bbox:[Math.min(...xs)-pad,Math.min(...ys)-pad,Math.max(...xs)+pad,Math.max(...ys)+pad]};
+ const points=samples.flatMap(p=>p.map(round));const xs=samples.map(p=>p[0]),ys=samples.map(p=>p[1]);const pad=options.width/2;
+ return {...options,id,type:'stroke',renderMode:'centerline',z,createdAt:new Date().toISOString(),points,bbox:[Math.min(...xs)-pad,Math.min(...ys)-pad,Math.max(...xs)+pad,Math.max(...ys)+pad]};
 }
 export function strokePath(stroke:StrokeElement):SkPath{
+ if(stroke.renderMode==='centerline'){
+  const pts=stroke.points;
+  if(pts.length<3)return Skia.Path.Make();
+  const svg=Array.from({length:Math.floor(pts.length/3)},(_,i)=>`${i===0?'M':'L'}${pts[i*3]} ${pts[i*3+1]}`).join(' ');
+  return Skia.Path.MakeFromSVGString(svg)??Skia.Path.Make();
+ }
  const points:Sample[]=[];for(let i=0;i<stroke.points.length;i+=3)points.push([stroke.points[i],stroke.points[i+1],stroke.points[i+2]]);
  const outline=getStroke(points,{size:stroke.width,thinning:stroke.tool==='pen'?0.55:0,smoothing:0.55,streamline:0.45,simulatePressure:points.every(p=>p[2]===0.5),start:{cap:true,taper:0},end:{cap:true,taper:0}});
  if(!outline.length)return Skia.Path.Make();
