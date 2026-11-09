@@ -4,14 +4,27 @@ export function shapeBounds(p:ShapeElement['params']):Bounds{
  const {x,y,w,h}=p;return [Math.min(x,x+w),Math.min(y,y+h),Math.max(x,x+w),Math.max(y,y+h)];
 }
 export function shapePath(s:ShapeElement):SkPath{
- const {x,y,w,h,points}=s.params;const p=Skia.Path.Make();
- if(s.kind==='line'||s.kind==='arrow'){p.moveTo(x,y);p.lineTo(x+w,y+h);
- if(s.kind==='arrow'){const a=Math.atan2(h,w),r=Math.max(14,s.stroke.width*4);p.moveTo(x+w-r*Math.cos(a-0.5),y+h-r*Math.sin(a-0.5));p.lineTo(x+w,y+h);p.lineTo(x+w-r*Math.cos(a+0.5),y+h-r*Math.sin(a+0.5))}}
- else if(s.kind==='rect')p.addRect(Skia.XYWHRect(Math.min(x,x+w),Math.min(y,y+h),Math.abs(w),Math.abs(h)));
- else if(s.kind==='ellipse')p.addOval(Skia.XYWHRect(Math.min(x,x+w),Math.min(y,y+h),Math.abs(w),Math.abs(h)));
- else if(s.kind==='triangle'){p.moveTo(x+w/2,y);p.lineTo(x+w,y+h);p.lineTo(x,y+h);p.close()}
- else if(points&&points.length>=4){p.moveTo(points[0],points[1]);for(let i=2;i<points.length;i+=2)p.lineTo(points[i],points[i+1]);p.close()}
- return p;
+ const {x,y,w,h,points}=s.params;
+ const left=Math.min(x,x+w),top=Math.min(y,y+h),right=Math.max(x,x+w),bottom=Math.max(y,y+h);
+ const num=(n:number)=>Number.isFinite(n)?String(n):'0';
+ let svg='';
+ if(s.kind==='line'||s.kind==='arrow'){
+  svg=`M ${num(x)} ${num(y)} L ${num(x+w)} ${num(y+h)}`;
+  if(s.kind==='arrow'){
+   const a=Math.atan2(h,w),r=Math.max(14,s.stroke.width*4);
+   svg+=` M ${num(x+w-r*Math.cos(a-0.5))} ${num(y+h-r*Math.sin(a-0.5))} L ${num(x+w)} ${num(y+h)} L ${num(x+w-r*Math.cos(a+0.5))} ${num(y+h-r*Math.sin(a+0.5))}`;
+  }
+ }else if(s.kind==='rect'){
+  svg=`M ${num(left)} ${num(top)} L ${num(right)} ${num(top)} L ${num(right)} ${num(bottom)} L ${num(left)} ${num(bottom)} Z`;
+ }else if(s.kind==='ellipse'){
+  const rx=(right-left)/2,ry=(bottom-top)/2,cx=left+rx,cy=top+ry;
+  if(rx>0&&ry>0)svg=`M ${num(cx+rx)} ${num(cy)} A ${num(rx)} ${num(ry)} 0 1 0 ${num(cx-rx)} ${num(cy)} A ${num(rx)} ${num(ry)} 0 1 0 ${num(cx+rx)} ${num(cy)} Z`;
+ }else if(s.kind==='triangle'){
+  svg=`M ${num(x+w/2)} ${num(y)} L ${num(x+w)} ${num(y+h)} L ${num(x)} ${num(y+h)} Z`;
+ }else if(points&&points.length>=6){
+  svg=points.map((v,i)=>i%2===0?`${i===0?'M':'L'} ${num(v)}`:` ${num(v)}`).join('')+' Z';
+ }
+ return (svg?Skia.Path.MakeFromSVGString(svg):null)??Skia.Path.Make();
 }
 export function makeShape(kind:ShapeKind,x:number,y:number,w:number,h:number,color:string,width:number,opacity:number,fill=false):ShapeElement{
  const params={x,y,w,h,rotation:0};return {id:'shape-'+Date.now()+'-'+Math.random().toString(36).slice(2),type:'shape',kind,params,stroke:{color,width,opacity},fill:fill?{color,opacity:0.2}:null,bbox:shapeBounds(params),z:0,createdAt:new Date().toISOString()};
