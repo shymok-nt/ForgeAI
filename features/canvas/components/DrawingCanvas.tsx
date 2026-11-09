@@ -452,7 +452,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
      return;
     }
    }
-   if(lx>=bounds[0]&&lx<=bounds[2]&&ly>=bounds[1]&&ly<=bounds[3]){imageDragging.value=true;imageDX.value=0;imageDY.value=0;return;}
+   if(lx>=bounds[0]&&lx<=bounds[2]&&ly>=bounds[1]&&ly<=bounds[3]){imageDragging.value=true;imageDX.value=0;imageDY.value=0;samples.value=[];drawing.value=false;draft.value='';return;}
+   // While an image is selected, a missed image hit must never fall
+   // through to the pen. Tapping outside can still deselect the image.
+   samples.value=[];drawing.value=false;draft.value='';return;
   }
   // Drag an already selected element immediately; don't wait for a long press.
   // The previous zero-distance Pan gesture prevented LongPress from reliably activating.
@@ -507,6 +510,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(blocked.value||e.numberOfPointers!==1)return;
   if(imageCorner.value){const p=pagePoint(e.x,e.y),b=imageBounds.value;if(!b)return;const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;const a=paintedImageRef.current?.rotation??0,cos=Math.cos(a),sin=Math.sin(a),dx=p[0]-cx,dy=p[1]-cy;const lx=cx+dx*cos+dy*sin,ly=cy-dx*sin+dy*cos;const vx=lx-imageCornerAnchorX.value,vy=ly-imageCornerAnchorY.value;const sx=imageCornerX.value-imageCornerAnchorX.value,sy=imageCornerY.value-imageCornerAnchorY.value;imageScale.value=Math.max(0.15,Math.min(8,(vx*sx+vy*sy)/Math.max(1,sx*sx+sy*sy)));return;}
   if(imageDragging.value){imageDX.value=e.translationX/(fitWidth*zoom.value);imageDY.value=e.translationY/(fitWidth*zoom.value);return}
+  if(imageBounds.value)return;
   if(tool==='hand'){const [x,y]=clamp(zoom.value,baseX.value+e.translationX,baseY.value+e.translationY);offsetX.value=x;offsetY.value=y;return}
   if(cornerActive.value){
    const p=pagePoint(e.x,e.y),cx=cornerCenterX.value,cy=cornerCenterY.value;
@@ -578,7 +582,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    drawing.value=false;
    runOnJS(notify)(false);return;
   }
-  if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
+  if(!imageBounds.value&&!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;cursorOn.value=false;runOnJS(notify)(false);
  }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false;cornerActive.value=false;if(!dragPending.value&&!draggingSelection.value){/* Keep the last pose until the JS handoff mounts. */}}).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(e=>{
