@@ -79,3 +79,9 @@ v2 sayfa içeriği artık hem `stroke` hem `shape` elemanlarını kabul eder. Sh
 Dokunuş yönlendirmesi Gesture Handler/Reanimated üzerinden yürür. Kalem dokunuşu önce aday olarak bekletilir; iki parmak tespit edilirse aday iptal edilir. Kalıcı çizim işlemi tamamlanınca sayfa içeriği güncellenir. Kayıt stratejisi: 2,5 saniye trailing debounce, 15 saniye üst sınır, aynı sayfa için seri SQLite yazımı. Gerçek cihazda pinch, lasso, şekil ve kayıt testleri gerekir.
 
 **Eksik Parça 2 özellikleri:** canlı seçim matrisi, tutamaçlarla sürükleyerek döndürme/ölçekleme, tam pano kes/kopyala/yapıştır, cetvel sürükleme/çizgiye yapıştırma, otomatik şekil tanıma ve gerçek cihaz performans doğrulaması. Cetvel şu anda yalnızca görsel yer tutucudur.
+
+## Piksel silgi ve çizgi geçişi (deneysel)
+
+Silgi panelinde **Piksel** (varsayılan) ve **Çizgi** modları bulunur; mod ve boyut ayarlara kaydedilir. Piksel modunda silgi yolu ile kesişen stroke'lar parçalara ayrılır, kesim sınırları ikili aramayla belirlenir ve kalan parçalar v2 stroke elemanları olarak saklanır. Tek silgi hareketi tek undo geçmişi girdisi üretir. Şekillerde şimdilik tüm şekli silme davranışı kullanılır. Çizgi modu kesişen stroke'un tamamını siler.
+
+Aktif çizgi, kalıcı içerik güncellenene kadar ekranda tutulur; tamamlanan çizgilerin Skia path'leri eleman kimliği ve nesne referansına göre önbelleğe alınır. Bu, çizgi bitişindeki yeniden hesaplama maliyetini azaltır. **Henüz doğrulanmayanlar:** gerçek zamanlı silgi maskesi, aktif/kalıcı çizginin piksel düzeyinde aynı geometriyle gösterimi, cihazda titremesiz geçiş ve 500+ çizgili sayfa performansı.
