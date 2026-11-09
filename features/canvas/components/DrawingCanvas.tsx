@@ -27,7 +27,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const originX=useDerivedValue(()=>(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value);
  const originY=useDerivedValue(()=>size.height>PAGE_HEIGHT*fitWidth*zoom.value?(size.height-PAGE_HEIGHT*fitWidth*zoom.value)/2+offsetY.value:offsetY.value);
  const transform=useDerivedValue(()=>[{translateX:originX.value},{translateY:originY.value},{scale:fitWidth*zoom.value}]);
- const clamp=useCallback((z:number,x:number,y:number):[number,number]=>{
+ const clamp=useCallback((z:number,x:number,y:number):[number,number]=>{ 'worklet';
   const pw=PAGE_WIDTH*fitWidth*z,ph=PAGE_HEIGHT*fitWidth*z;
   const limitX=Math.max(0,(pw-size.width)/2+32);
   const baseY=ph<size.height?(size.height-ph)/2:0;
