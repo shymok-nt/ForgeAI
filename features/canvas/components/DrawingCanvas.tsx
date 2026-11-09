@@ -421,13 +421,22 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const pan=Gesture.Pan().minDistance(0).onTouchesDown(e=>{
   if(e.allTouches.length>1){blocked.value=true;imageDragging.value=false;imageDX.value=0;imageDY.value=0;samples.value=[];draft.value='';drawing.value=false}
  }).onBegin(e=>{
-  if(blocked.value||e.numberOfPointers!==1)return;
+  if(e.numberOfPointers!==1||imageGestureLocked.value)return;
+  // A previous two-finger gesture must not disable the next one-finger drag.
+  blocked.value=false;
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
   if(tool==='hand'){baseX.value=offsetX.value;baseY.value=offsetY.value;return}
-  if(imageBounds.value){const p=pagePoint(e.x,e.y),bounds=imageBounds.value;
+  if(imagePaintBounds.value){
+   // Hit-test the actually painted image, not the persisted rectangle.
+   // The painted geometry is frozen to prevent jitter, so after a pinch
+   // the old rectangle no longer matches the image on screen.
+   const p=pagePoint(e.x,e.y),bounds=imagePaintBounds.value;
    const cx=(bounds[0]+bounds[2])/2,cy=(bounds[1]+bounds[3])/2;
-   const angle=imageIdRef.current?(paintedImageRef.current?.rotation??0):0;
-   const cos=Math.cos(angle),sin=Math.sin(angle),dx=p[0]-cx,dy=p[1]-cy;
+   const scale=Math.max(0.001,imageCommittedScale.value*imageScale.value);
+   const angle=(paintedImageRef.current?.rotation??0)+imageCommittedAngle.value+imageAngle.value;
+   const cos=Math.cos(angle),sin=Math.sin(angle);
+   const dx=(p[0]-cx-imageCommittedX.value-imageDX.value)/scale;
+   const dy=(p[1]-cy-imageCommittedY.value-imageDY.value)/scale;
    const lx=cx+dx*cos+dy*sin,ly=cy-dx*sin+dy*cos;
    const radius=24/(fitWidth*zoom.value);
    if(Platform.OS==='web'){
