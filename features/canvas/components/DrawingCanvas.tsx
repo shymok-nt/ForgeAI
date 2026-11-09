@@ -382,6 +382,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const imagePinching=useSharedValue(false),imageScale=useSharedValue(1),imageAngle=useSharedValue(0),imageRotateActive=useSharedValue(false),imagePinchActive=useSharedValue(false);
  const imageFocalX=useSharedValue(0),imageFocalY=useSharedValue(0),imageFocalDX=useSharedValue(0),imageFocalDY=useSharedValue(0);
  const imageBounds=useSharedValue<[number,number,number,number]|null>(null);
+ const imagePaintBounds=useSharedValue<[number,number,number,number]|null>(null);
  const imageCorner=useSharedValue(false),imageCornerStart=useSharedValue(1),imageCornerX=useSharedValue(0),imageCornerY=useSharedValue(0);
  const imageCornerAnchorX=useSharedValue(0),imageCornerAnchorY=useSharedValue(0),imageCornerSignX=useSharedValue(1),imageCornerSignY=useSharedValue(1);
  const imageCommittedX=useSharedValue(0),imageCommittedY=useSharedValue(0),imageCommittedScale=useSharedValue(1),imageCommittedAngle=useSharedValue(0);
@@ -392,23 +393,29 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const paintedImageRef=useRef<import('@/features/canvas/types').PageImage|null>(null);
  paintedImageRef.current=paintedImage;
  
- const imageTransform=useDerivedValue(()=>{const b=imageBounds.value,cx=b?(b[0]+b[2])/2:0,cy=b?(b[1]+b[3])/2:0;return [{translateX:imageCommittedX.value+imageDX.value+imageFocalDX.value},{translateY:imageCommittedY.value+imageDY.value+imageFocalDY.value},{translateX:cx},{translateY:cy},{rotate:imageCommittedAngle.value+imageAngle.value},{scale:imageCommittedScale.value*imageScale.value},{translateX:-cx},{translateY:-cy}]});
+ const imageTransform=useDerivedValue(()=>{const b=imagePaintBounds.value,cx=b?(b[0]+b[2])/2:0,cy=b?(b[1]+b[3])/2:0;return [{translateX:imageCommittedX.value+imageDX.value+imageFocalDX.value},{translateY:imageCommittedY.value+imageDY.value+imageFocalDY.value},{translateX:cx},{translateY:cy},{rotate:imageCommittedAngle.value+imageAngle.value},{scale:imageCommittedScale.value*imageScale.value},{translateX:-cx},{translateY:-cy}]});
  const commitImagePinch=(dx:number,dy:number,scale:number,angle:number)=>{imageHandoff.current=true;const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).map(i=>{if(i.id!==id)return i;const w=Math.max(40,i.width*scale),h=Math.max(40,i.height*scale);return {...i,x:i.x+(i.width-w)/2+dx,y:i.y+(i.height-h)/2+dy,width:w,height:h,rotation:(i.rotation??0)+angle}})})};
  const finishImagePinch=()=>{'worklet';const dx=imageFocalDX.value,dy=imageFocalDY.value,scale=imageScale.value,angle=imageAngle.value;imagePinching.value=false;imageCommittedX.value+=dx;imageCommittedY.value+=dy;imageCommittedScale.value*=scale;imageCommittedAngle.value+=angle;imageFocalDX.value=0;imageFocalDY.value=0;imageScale.value=1;imageAngle.value=0;if(Math.abs(dx)+Math.abs(dy)+Math.abs(scale-1)+Math.abs(angle)>0.0001)runOnJS(commitImagePinch)(dx,dy,scale,angle)};
  const commitImageMove=(dx:number,dy:number)=>{imageHandoff.current=true;const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).map(i=>i.id===id?{...i,x:i.x+dx,y:i.y+dy}:i)})};
  // Update the selection origin and retire the UI-thread preview in the same
  // layout commit as the persisted image geometry. A later passive effect
  // would shift the transform origin one frame after the image was repainted.
+ // Like the proven shape-selection fix, keep one immutable Skia image
+ // throughout selection. Repainting updated image geometry and resetting the
+ // UI-thread transform in separate frames caused the visible release jitter.
+ // Only reset the preview when a DIFFERENT image is selected/deselected.
+ const paintedImageIdRef=useRef<string|null>(null);
  useLayoutEffect(()=>{
-  const i=(content.images??[]).find(x=>x.id===imageId);
-  if(!imageHandoff.current){imageBounds.value=i?[i.x,i.y,i.x+i.width,i.y+i.height]:null;setPaintedImage(i??null);return;}
-  // The old image stays painted under the accumulated UI-thread transform
-  // while React saves the new geometry. Rebase the painted image afterwards.
+  const current=(content.images??[]).find(x=>x.id===imageId);
+  imageBounds.value=current?[current.x,current.y,current.x+current.width,current.y+current.height]:null;
+  if(paintedImageIdRef.current===imageId)return;
+  paintedImageIdRef.current=imageId;
   imageHandoff.current=false;
-  imageBounds.value=i?[i.x,i.y,i.x+i.width,i.y+i.height]:null;
-  setPaintedImage(i??null);
   imageCommittedX.value=0;imageCommittedY.value=0;
   imageCommittedScale.value=1;imageCommittedAngle.value=0;
+  imageDX.value=0;imageDY.value=0;imageScale.value=1;imageAngle.value=0;
+  imagePaintBounds.value=current?[current.x,current.y,current.x+current.width,current.y+current.height]:null;
+  setPaintedImage(current??null);
  },[imageId,content.images]);
  const pan=Gesture.Pan().minDistance(0).onTouchesDown(e=>{
   if(e.allTouches.length>1){blocked.value=true;imageDragging.value=false;imageDX.value=0;imageDY.value=0;samples.value=[];draft.value='';drawing.value=false}
