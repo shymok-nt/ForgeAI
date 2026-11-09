@@ -144,7 +144,6 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const transformActive=useSharedValue(false),transformPending=useSharedValue(false);
  const [handoff,setHandoff]=useState<{elements:Element[];bounds:readonly [number,number,number,number];rotation:number;dx:number;dy:number;scale:number;angle:number}|null>(null);
  const pendingHandoff=useRef(false);
- const handoffFrame=useRef<number|null>(null);
  const rotateActive=useSharedValue(false),pinchActive=useSharedValue(false);
  const gestureFocalX=useSharedValue(0),gestureFocalY=useSharedValue(0);
  const gestureCenterX=useSharedValue(0),gestureCenterY=useSharedValue(0);
@@ -205,7 +204,6 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const finalElements=next.filter(e=>ids.has(e.id));
   const finalFrame=selectionFrame(finalElements);
   if(!finalFrame)return;
-  if(handoffFrame.current!==null){cancelAnimationFrame(handoffFrame.current);handoffFrame.current=null;}
   pendingHandoff.current=true;
   setHandoff({elements:finalElements,bounds:finalFrame.bounds,rotation:finalFrame.rotation,dx:0,dy:0,scale:1,angle:0});
   onChange(withHeight(next));
@@ -244,8 +242,8 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   setHandoff({elements:finalElements,bounds:finalFrame.bounds,rotation:finalFrame.rotation,dx:0,dy:0,scale:1,angle:0});
   onChange(withHeight(next));
  };
- // The handoff layer must mount before the UI-thread transform is reset.
- // Otherwise Skia paints the old geometry at its original position for one frame.
+ // React commits the final path and its selection frame as ONE Skia group.
+ // Reset worklet transforms only after that group has switched to final geometry.
  useLayoutEffect(()=>{
   if(!handoff)return;
   dragX.value=0;dragY.value=0;dragPending.value=false;
@@ -254,27 +252,14 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  },[handoff]);
  useLayoutEffect(()=>{
   if(!handoff||!pendingHandoff.current)return;
-  // Wait for the actual updated content, not an arbitrary number of frames
-  // after the pointer is released.
-  const committed=handoff.elements.every(old=>{
-   const now=content.elements.find(e=>e.id===old.id);
-   return now===old;
-  });
+  const committed=handoff.elements.every(finalElement=>
+   content.elements.some(element=>element===finalElement)
+  );
   if(!committed)return;
   pendingHandoff.current=false;
-  if(handoffFrame.current!==null)cancelAnimationFrame(handoffFrame.current);
-  // Allow Skia's native/web drawing pipeline to finish its own commit
-  // before removing the final-geometry overlay. Two browser frames were
-  // insufficient on slower CanvasKit renders.
-  const settle=(remaining:number)=>{
-   handoffFrame.current=requestAnimationFrame(()=>{
-    if(remaining>1)settle(remaining-1);
-    else {handoffFrame.current=null;setHandoff(null);}
-   });
-  };
-  settle(4);
+  // No animation-frame delay: both branches now paint identical final paths.
+  setHandoff(null);
  },[content,handoff]);
- useEffect(()=>()=>{if(handoffFrame.current!==null)cancelAnimationFrame(handoffFrame.current)},[]);
  const selectionStart=useSharedValue<Sample|null>(null);
  const downTime=useSharedValue(0),startX=useSharedValue(0),startY=useSharedValue(0);
  const originX=useDerivedValue(()=>(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value);
@@ -525,21 +510,23 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
-  {tool==='select'&&selectedElements.length>0&&!handoff&&<Group transform={selectionTransform}>{selectedElements.map(element=><StrokeLayer key={element.id} element={element}/>)}</Group>}
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
- {tool==='select'&&selectedBounds&&!handoff&&<Group transform={selectionTransform}>
-  <Group origin={vec((selectedBounds[0]+selectedBounds[2])/2,(selectedBounds[1]+selectedBounds[3])/2)} transform={[{rotate:selectedRotation}]}>
-   <Rect x={selectionFrameX} y={selectionFrameY} width={selectionFrameW} height={selectionFrameH} color="#3388EE" style="stroke" strokeWidth={1.5}/>
-   {selectionCorners.map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={selectionHandleRadius} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={selectionHandleRadius} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
-  </Group>
- </Group>}
- {tool==='select'&&handoff&&handoffBounds&&<Group>
-  {handoffElements.map(element=><StrokeLayer key={element.id} element={element}/>)}
-  <Group origin={vec((handoffBounds[0]+handoffBounds[2])/2,(handoffBounds[1]+handoffBounds[3])/2)} transform={[{rotate:handoffRotation}]}>
-   <Rect x={handoffBounds[0]-10} y={handoffBounds[1]-10} width={handoffBounds[2]-handoffBounds[0]+20} height={handoffBounds[3]-handoffBounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
-   {[[handoffBounds[0]-10,handoffBounds[1]-10],[handoffBounds[2]+10,handoffBounds[1]-10],[handoffBounds[0]-10,handoffBounds[3]+10],[handoffBounds[2]+10,handoffBounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
-  </Group>
+ {tool==='select'&&(handoffBounds||selectedBounds)&&<Group transform={handoff?[]:selectionTransform}>
+  {(handoff?handoffElements:selectedElements).map(element=><StrokeLayer key={element.id} element={element}/>)}
+  {(()=>{
+   const bounds=handoffBounds??selectedBounds!;
+   const rotation=handoff?handoffRotation:selectedRotation;
+   const x=bounds[0]-10,y=bounds[1]-10,w=bounds[2]-bounds[0]+20,h=bounds[3]-bounds[1]+20;
+   return <Group origin={vec((bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2)} transform={[{rotate:rotation}]}>
+    {handoff?
+     <Rect x={x} y={y} width={w} height={h} color="#3388EE" style="stroke" strokeWidth={1.5}/>:
+     <Rect x={selectionFrameX} y={selectionFrameY} width={selectionFrameW} height={selectionFrameH} color="#3388EE" style="stroke" strokeWidth={1.5}/>}
+    {handoff?
+     [[x,y],[x+w,y],[x,y+h],[x+w,y+h]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>):
+     selectionCorners.map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={selectionHandleRadius} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={selectionHandleRadius} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
+   </Group>;
+  })()}
  </Group>}
  {tool!=='eraser'&&tool!=='select'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
  {tool==='eraser'&&<Circle cx={cursorX} cy={cursorY} r={eraserRadius} color="#808080" opacity={cursorOpacity} style="stroke" strokeWidth={1.5}/>}
