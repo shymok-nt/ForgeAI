@@ -1,4 +1,4 @@
-import React,{memo,useCallback,useEffect,useMemo,useRef,useState} from 'react';
+import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {View,type LayoutChangeEvent} from 'react-native';
 import {Canvas,Group,Path,Rect,Line,Circle,vec} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector} from 'react-native-gesture-handler';
@@ -97,7 +97,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  };
  const notify=(active:boolean)=>onDrawingActive?.(active);
  const complete=(points:Sample[])=>{endStroke(points);};
- useEffect(()=>{if(awaitingCommit.value){requestAnimationFrame(()=>{draft.value='';awaitingCommit.value=false})}},[content]);
+ useLayoutEffect(()=>{if(awaitingCommit.value){draft.value='';awaitingCommit.value=false}},[content]);
  const pan=Gesture.Pan().minDistance(0).onTouchesDown(e=>{
   if(e.allTouches.length>1){blocked.value=true;samples.value=[];draft.value='';drawing.value=false}
  }).onBegin(e=>{
