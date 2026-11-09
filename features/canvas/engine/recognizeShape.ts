@@ -83,6 +83,14 @@ function rectangleFit(pts:Sample[],diag:number):number{
  return best;
 }
 
+// Snap almost-square and almost-circular hand drawings to exact geometry.
+// Preserve deliberately wide or tall rectangles and ellipses.
+function regularize(kind:'rect'|'ellipse',x:number,y:number,w:number,h:number):Recognized{
+ const ratio=Math.min(w,h)/Math.max(w,h);
+ if(ratio<0.76)return {kind,x,y,w,h};
+ const side=(w+h)/2;
+ return {kind,x:x+(w-side)/2,y:y+(h-side)/2,w:side,h:side};
+}
 export function recognizeShape(raw:Sample[]):Recognized|null{
  if(raw.length<4)return null;
  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
@@ -135,7 +143,7 @@ export function recognizeShape(raw:Sample[]):Recognized|null{
  // Strong four-corner evidence takes priority over an ellipse's bbox-based score.
  // Preserve the original candidate competition when the corners are ambiguous.
  if(cornerRec<0.075*diag&&cornerRec<tri*0.9){
-  return {kind:'rect',x:minX,y:minY,w,h};
+  return regularize('rect',minX,minY,w,h);
  }
  const candidates=[
   {kind:'ellipse' as const,e:ell},
@@ -144,9 +152,15 @@ export function recognizeShape(raw:Sample[]):Recognized|null{
  ].sort((a,b)=>a.e-b.e);
  const best=candidates[0];
  if(best.e>0.075*diag)return null;
- if(best.kind==='ellipse')return {kind:'ellipse',x:minX,y:minY,w,h};
- if(best.kind==='rect')return {kind:'rect',x:minX,y:minY,w,h};
+ if(best.kind==='ellipse')return regularize('ellipse',minX,minY,w,h);
+ if(best.kind==='rect')return regularize('rect',minX,minY,w,h);
  const v=triPoly!;
  const px=v.flatMap(p=>[Math.round(p[0]*10)/10,Math.round(p[1]*10)/10]);
- return {kind:'polygon',x:minX,y:minY,w,h,points:px};
+ // Rebuild a balanced isosceles triangle from the recognized bounds.
+ // Keeping the traced vertices makes supposedly straight edges look skewed.
+ const side=Math.max(w,h*2/Math.sqrt(3));
+ const height=side*Math.sqrt(3)/2;
+ const tcx=(minX+maxX)/2,tcy=(minY+maxY)/2;
+ const left=tcx-side/2,top=tcy-height/2;
+ return {kind:'polygon',x:left,y:top,w:side,h:height,points:[tcx,top,tcx+side/2,top+height,tcx-side/2,top+height]};
 }
