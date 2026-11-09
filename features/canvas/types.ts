@@ -7,5 +7,6 @@ export type ShapeKind='line'|'arrow'|'rect'|'ellipse'|'triangle'|'polygon';
 export type ShapeMode=ShapeKind|'auto';
 export type ShapeElement={id:string;type:'shape';z:number;createdAt:string;kind:ShapeKind;params:{x:number;y:number;w:number;h:number;rotation:number;points?:number[]};stroke:{color:string;width:number;opacity:number};fill:null|{color:string;opacity:number};bbox:Bounds};
 export type Element=StrokeElement|ShapeElement;
-export type PageContent={v:2;elements:Element[];h?:number};
+export type PageImage={id:string;uri:string;x:number;y:number;width:number;height:number};
+export type PageContent={v:2;elements:Element[];images?:PageImage[];h?:number};
 export const emptyContent=():PageContent=>({v:2,elements:[]});
