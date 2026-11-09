@@ -16,7 +16,7 @@ import {record,undo,redo,historyState} from '@/features/canvas/store/history';
 import type {PageContent,ShapeMode} from '@/features/canvas/types';
 import type {Page} from '@/types/page';
 import type {PageTemplate} from '@/types/notebook';
-import {useKeepAwake} from 'expo-keep-awake';
+import {useCanvasAwake} from '@/features/canvas/hooks/useCanvasAwake';
 const templates:PageTemplate[]=['boş','çizgili','kareli','noktalı'];
 const swatches=['#1B1B2F','#3347D9','#FF6B5A','#3E8E5A','#F2B632','#7B5CD6','#FF8BBD','#16A6B6','#FFFFFF','#6D6D6D','#F48C35','#7947AB'];
 const hit={width:44,height:44,alignItems:'center' as const,justifyContent:'center' as const};
@@ -81,7 +81,7 @@ export default function NoteCanvasScreen(){
  </SafeAreaView>;
 }
 function CanvasPage({page,tool,brush,eraserSize,eraserMode,onController,onHistory,onDrawStart,shapeKind,shapeFill,onSelectionChange,selectionAction}:{page:Page;tool:Tool;brush:Brush;eraserSize:number;eraserMode:'pixel'|'stroke';onController:(value:CanvasController|null)=>void;onHistory:()=>void;onDrawStart:()=>void;shapeKind:ShapeMode;shapeFill:boolean;onSelectionChange:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}}){
- useKeepAwake();const [content,setContent]=useState<PageContent>(()=>parseContent(page.content));
+ useCanvasAwake();const [content,setContent]=useState<PageContent>(()=>parseContent(page.content));
  const {error,saving,retry,flush,setDrawingActive}=useAutosave(page.id,content);
  const change=(next:PageContent)=>{record(page.id,content);setContent(next);onHistory()};
  const back=()=>{const next=undo(page.id,content);if(next){setContent(next);onHistory()}};
