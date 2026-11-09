@@ -379,6 +379,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
      return()=>{cancelAnimationFrame(r1);cancelAnimationFrame(r2)};
    },[content]);
  const imageDragging=useSharedValue(false),imageDX=useSharedValue(0),imageDY=useSharedValue(0);
+ const imageGestureLocked=useSharedValue(false);
  const imagePinching=useSharedValue(false),imageScale=useSharedValue(1),imageAngle=useSharedValue(0),imageRotateActive=useSharedValue(false),imagePinchActive=useSharedValue(false);
  const imageFocalX=useSharedValue(0),imageFocalY=useSharedValue(0),imageFocalDX=useSharedValue(0),imageFocalDY=useSharedValue(0);
  const imageBounds=useSharedValue<[number,number,number,number]|null>(null);
@@ -572,7 +573,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;cursorOn.value=false;runOnJS(notify)(false);
  }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false;cornerActive.value=false;if(!dragPending.value&&!draggingSelection.value){/* Keep the last pose until the JS handoff mounts. */}}).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(e=>{
-  if(imageBounds.value){const p=pagePoint(e.focalX,e.focalY),b=imageBounds.value;if(p[0]>=b[0]-30&&p[0]<=b[2]+30&&p[1]>=b[1]-30&&p[1]<=b[3]+30){blocked.value=true;samples.value=[];draft.value='';drawing.value=false;imagePinching.value=true;imagePinchActive.value=true;imageRotateActive.value=false;imageDragging.value=false;imageDX.value=0;imageDY.value=0;imageScale.value=1;imageAngle.value=0;imageFocalDX.value=0;imageFocalDY.value=0;imageFocalX.value=e.focalX;imageFocalY.value=e.focalY;return;}}
+  if(imageBounds.value){blocked.value=true;samples.value=[];draft.value='';drawing.value=false;imageGestureLocked.value=true;imagePinching.value=true;imagePinchActive.value=true;imageDragging.value=false;imageDX.value=0;imageDY.value=0;imageScale.value=1;imageFocalDX.value=0;imageFocalDY.value=0;imageFocalX.value=e.focalX;imageFocalY.value=e.focalY;return;}
   if(tool==='select'&&selectionBoundsValue.value){
    blocked.value=true;samples.value=[];draft.value='';drawing.value=false;
    transformActive.value=true;pinchActive.value=true;
@@ -589,7 +590,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   pinchPageX.value=(e.focalX-originX.value)/(fitWidth*zoom.value);
   pinchPageY.value=(e.focalY-originY.value)/(fitWidth*zoom.value);
  }).onUpdate(e=>{
-  if(imagePinching.value){imageScale.value=Math.max(0.15,Math.min(8,e.scale));imageFocalDX.value=(e.focalX-imageFocalX.value)/(fitWidth*zoom.value);imageFocalDY.value=(e.focalY-imageFocalY.value)/(fitWidth*zoom.value);return;}
+  if(imageGestureLocked.value){imageScale.value=Math.max(0.15,Math.min(8,e.scale));imageFocalDX.value=(e.focalX-imageFocalX.value)/(fitWidth*zoom.value);imageFocalDY.value=(e.focalY-imageFocalY.value)/(fitWidth*zoom.value);return;}
   if(tool==='select'&&selectionBoundsValue.value){
    gestureScale.value=Math.max(0.15,Math.min(8,e.scale));
    gestureDX.value=(e.focalX-gestureFocalX.value)/(fitWidth*zoom.value);
@@ -603,7 +604,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const [x,y]=clamp(z,desiredX,desiredY);
   zoom.value=z;offsetX.value=x;offsetY.value=y;
  }).onEnd(()=>{
-  if(imagePinching.value){imagePinchActive.value=false;if(!imageRotateActive.value)finishImagePinch();return;}
+  if(imageGestureLocked.value){imagePinchActive.value=false;if(!imageRotateActive.value){finishImagePinch();imageGestureLocked.value=false;}return;}
   if(tool==='select'&&transformActive.value){
    pinchActive.value=false;
    if(!rotateActive.value){
@@ -623,13 +624,13 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   blocked.value=true;
  }).runOnJS(false);
  const rotation=Gesture.Rotation().onBegin(()=>{
-  if(imagePinching.value){imageRotateActive.value=true;return;}
+  if(imageBounds.value){imageGestureLocked.value=true;imagePinching.value=true;imageRotateActive.value=true;blocked.value=true;return;}
   if(tool==='select'&&selectionBoundsValue.value){rotateActive.value=true;}
  }).onUpdate(e=>{
-  if(imagePinching.value){imageAngle.value=e.rotation;return;}
+  if(imageGestureLocked.value){imageAngle.value=e.rotation;return;}
   if(tool==='select'&&transformActive.value)gestureAngle.value=e.rotation;
  }).onEnd(()=>{
-  if(imagePinching.value){imageRotateActive.value=false;if(!imagePinchActive.value)finishImagePinch();return;}
+  if(imageGestureLocked.value){imageRotateActive.value=false;if(!imagePinchActive.value){finishImagePinch();imageGestureLocked.value=false;}return;}
   if(tool==='select'&&transformActive.value){
    rotateActive.value=false;
    if(!pinchActive.value){
