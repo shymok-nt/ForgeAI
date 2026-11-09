@@ -1,5 +1,6 @@
+import {SafeAreaView} from 'react-native-safe-area-context';
 import React,{useEffect,useRef,useState} from 'react';
-import {Alert,Modal,Pressable,SafeAreaView,ScrollView,Text,View,useWindowDimensions} from 'react-native';
+import {Alert,Modal,Pressable,ScrollView,Text,View,useWindowDimensions} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
 import {ArrowLeft,Undo2,Redo2,Ellipsis,Eye,Palette,ChevronLeft,ChevronRight,X,Move,RotateCw,Maximize2,Copy,Trash2,Minus,Plus} from 'lucide-react-native';
 import {useTheme} from '@/theme/ThemeProvider';
