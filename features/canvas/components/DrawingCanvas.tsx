@@ -64,7 +64,14 @@ const StaticPaper=memo(function StaticPaper({template,paperColor,pageHeight,fitW
 });
 const StrokeLayer=memo(function StrokeLayer({element}:{element:Element}){
  const path=useMemo(()=>cachedPath(element),[element]);
- if(element.type==='shape')return <>{element.fill&&<Path path={path} color={element.fill.color} opacity={element.fill.opacity} style="fill"/>}<Path path={path} color={element.stroke.color} opacity={element.stroke.opacity} style="stroke" strokeWidth={element.stroke.width}/></>;
+ if(element.type==='shape'){
+  const {x,y,w,h,rotation}=element.params;
+  const center=vec(x+w/2,y+h/2);
+  return <Group origin={center} transform={[{rotate:rotation}]}>
+   {element.fill&&<Path path={path} color={element.fill.color} opacity={element.fill.opacity} style="fill"/>}
+   <Path path={path} color={element.stroke.color} opacity={element.stroke.opacity} style="stroke" strokeWidth={element.stroke.width}/>
+  </Group>;
+ }
  return <Path path={path} color={element.color} opacity={element.opacity} blendMode={element.tool==='highlighter'?'multiply':'srcOver'} {...(element.renderMode==='centerline'?{style:'stroke' as const,strokeWidth:element.width,strokeCap:'round' as const,strokeJoin:'round' as const}:{})}/>;
 });
 const Completed=memo(function Completed({content,hiddenIds}:{content:PageContent;hiddenIds?:string[]}){
