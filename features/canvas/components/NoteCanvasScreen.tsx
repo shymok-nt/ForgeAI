@@ -1,4 +1,6 @@
 import {SafeAreaView} from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import * as Crypto from 'expo-crypto';
 import React,{useEffect,useRef,useState} from 'react';
 import {Alert,Modal,Pressable,ScrollView,Text,View,useWindowDimensions} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
@@ -30,6 +32,7 @@ export default function NoteCanvasScreen(){
  const [templatePageId,setTemplatePageId]=useState<string|null>(null);
  const [moreOpen,setMoreOpen]=useState(false);const [panel,setPanel]=useState<'tool'|'palette'|null>(null),[sheet,setSheet]=useState(false),[focus,setFocus]=useState(false),[eraserSize,setEraserSize]=useState(24),[eraserMode,setEraserMode]=useState<'pixel'|'stroke'>('pixel');
  const [controller,setController]=useState<CanvasController|null>(null);
+ const [imageRequest,setImageRequest]=useState<{uri:string;width:number;height:number;version:number}|null>(null);
  const [shapeKind,setShapeKind]=useState<ShapeMode>('auto'),[shapeFill,setShapeFill]=useState(false),[ruler,setRuler]=useState(false);
  const [selectedElements,setSelectedElements]=useState<string[]>([]),[selectionAction,setSelectionAction]=useState<{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}>();
  const action=(kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color',value?:number,color?:string)=>setSelectionAction({kind,value,color,version:Date.now()});
@@ -54,6 +57,19 @@ export default function NoteCanvasScreen(){
   {label:'Defteri düzenle',onPress:()=>router.push({pathname:'/notebook-editor',params:{id}})}
  ];
 
+ const insertImage=async()=>{
+  if(!selected)return;
+  try{
+   const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsEditing:false,quality:0.65,base64:true});
+   if(result.canceled||!result.assets[0])return;
+   const asset=result.assets[0];
+   if(!asset.base64){Alert.alert('Resim eklenemedi','Resim verisi okunamadı.');return;}
+   const mime=asset.mimeType==='image/png'?'image/png':'image/jpeg';
+   const ratio=Math.max(0.1,(asset.width||1)/(asset.height||1));
+   const w=Math.min(650,Math.max(150,ratio*450));const h=w/ratio;
+   setImageRequest({uri:`data:${mime};base64,${asset.base64}`,width:w,height:h,version:Date.now()});
+  }catch{Alert.alert('Resim eklenemedi','Galeriden resim seçilirken bir hata oluştu.');}
+ };
  const chooseTool=(t:Tool)=>{if(tool===t)setPanel(p=>p==='tool'?null:'tool');else{setTool(t);setPanel(null)}};
  const chooseColor=(color:string)=>{setBrush(b=>({...b,color}));setRecent(r=>[color,...r.filter(x=>x!==color)].slice(0,8))};
  const ink=colors.ink,muted=colors.muted;const backdrop=scheme==='dark'?'#0B0B10':'#EEE9DF';
@@ -79,13 +95,13 @@ export default function NoteCanvasScreen(){
  const popover=panel&&<View style={{position:'absolute',zIndex:20,bottom:tablet?undefined:112,top:tablet?8:undefined,right:tablet?16:24,left:tablet?undefined:24,width:tablet?300:undefined,padding:16,borderRadius:20,backgroundColor:colors.surfaceRaised,shadowColor:'#000',shadowOpacity:0.15,shadowRadius:16,elevation:8}}><Pressable accessibilityRole="button" accessibilityLabel="Paneli kapat" onPress={()=>setPanel(null)} style={{alignSelf:'flex-end',width:44,height:36,alignItems:'center',justifyContent:'center'}}><X size={20} color={ink}/></Pressable>{panel==='tool'?toolPanel:palette}</View>;
  return <SafeAreaView style={{flex:1,backgroundColor:backdrop}}>
  {!focus&&<View style={{minHeight:tablet?82:80,paddingTop:10,paddingBottom:8,flexDirection:'row',alignItems:'center',paddingHorizontal:tablet?12:4,backgroundColor:colors.surface,borderBottomWidth:1,borderColor:colors.divider}}>
- {heading}{tablet&&<View style={{flex:1,alignItems:'center',flexDirection:'row',justifyContent:'center',gap:8}}><CanvasToolbar tablet tool={tool} colors={colors} onTool={chooseTool} onPages={()=>setSheet(true)}/><Pressable accessibilityRole="button" accessibilityLabel="Renk paleti" onPress={()=>setPanel(p=>p==='palette'?null:'palette')} style={[hit,{width:44}]}><View style={{width:32,height:32,borderRadius:16,backgroundColor:brush.color,borderWidth:3,borderColor:colors.border}}/></Pressable></View>}
+ {heading}{tablet&&<View style={{flex:1,alignItems:'center',flexDirection:'row',justifyContent:'center',gap:8}}><CanvasToolbar tablet tool={tool} colors={colors} onTool={chooseTool} onPages={()=>setSheet(true)} onImage={()=>void insertImage()}/><Pressable accessibilityRole="button" accessibilityLabel="Renk paleti" onPress={()=>setPanel(p=>p==='palette'?null:'palette')} style={[hit,{width:44}]}><View style={{width:32,height:32,borderRadius:16,backgroundColor:brush.color,borderWidth:3,borderColor:colors.border}}/></Pressable></View>}
  {undoButton}{redoButton}{control('Diğer',Ellipsis,more)}{tablet&&control('Odak modu',Eye,()=>setFocus(true))}
  </View>}
  <View style={{flex:1,flexDirection:'row'}}>
  {tablet&&!focus&&<View style={{width:132,backgroundColor:colors.background,borderRightWidth:1,borderRightColor:colors.divider}}><CanvasPageStrip tablet pages={pages} selectedId={selected?.id} colors={colors} onSelect={select} onAdd={()=>void addPage()} onRemove={askRemove} onMove={(p,i)=>void move(p,i)} onActions={pageActions}/></View>}
  <View style={{flex:1,marginHorizontal:0,marginTop:0,marginBottom:0,borderRadius:0,overflow:'hidden'}}>
- {selected?<CanvasPage key={selected.id} page={selected} tool={tool} brush={brush} eraserSize={eraserSize} eraserMode={eraserMode} onController={setController} onHistory={()=>{}} onDrawStart={()=>setPanel(null)} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={setSelectedElements} selectionAction={selectionAction}/>:<Text style={{color:ink}}>Sayfalar yükleniyor…</Text>}
+ {selected?<CanvasPage key={selected.id} page={selected} tool={tool} brush={brush} eraserSize={eraserSize} eraserMode={eraserMode} onController={setController} onHistory={()=>{}} onDrawStart={()=>setPanel(null)} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={setSelectedElements} selectionAction={selectionAction} imageRequest={imageRequest}/>:<Text style={{color:ink}}>Sayfalar yükleniyor…</Text>}
  </View>
  <View pointerEvents="none" style={{position:'absolute',bottom:tablet?22:110,right:24,backgroundColor:'#1B1B2FBB',borderRadius:20,paddingHorizontal:12,paddingVertical:7}}><Text style={{color:'#FFFFFF',fontSize:12}}>{index+1} / {pages.length}</Text></View>
  {focus&&<Pressable accessibilityRole="button" accessibilityLabel="Araç çubuklarını göster" onPress={()=>setFocus(false)} style={{position:'absolute',top:0,left:0,right:0,height:44,alignItems:'center',justifyContent:'center'}}><Eye color={colors.accent} size={20}/></Pressable>}
@@ -122,10 +138,11 @@ export default function NoteCanvasScreen(){
  </View></View></Modal>
  </SafeAreaView>;
 }
-function CanvasPage({page,tool,brush,eraserSize,eraserMode,onController,onHistory,onDrawStart,shapeKind,shapeFill,onSelectionChange,selectionAction}:{page:Page;tool:Tool;brush:Brush;eraserSize:number;eraserMode:'pixel'|'stroke';onController:(value:CanvasController|null)=>void;onHistory:()=>void;onDrawStart:()=>void;shapeKind:ShapeMode;shapeFill:boolean;onSelectionChange:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}}){
+function CanvasPage({page,tool,brush,eraserSize,eraserMode,onController,onHistory,onDrawStart,shapeKind,shapeFill,onSelectionChange,selectionAction,imageRequest}:{page:Page;tool:Tool;brush:Brush;eraserSize:number;eraserMode:'pixel'|'stroke';onController:(value:CanvasController|null)=>void;onHistory:()=>void;onDrawStart:()=>void;shapeKind:ShapeMode;shapeFill:boolean;onSelectionChange:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number};imageRequest?:{uri:string;width:number;height:number;version:number}|null}){
  useCanvasAwake();const [content,setContent]=useState<PageContent>(()=>parseContent(page.content));
  const {error,saving,retry,flush,setDrawingActive}=useAutosave(page.id,content);
  const change=(next:PageContent)=>{record(page.id,content);setContent(next);onHistory()};
+ useEffect(()=>{if(!imageRequest)return;setContent(previous=>{record(page.id,previous);return {...previous,images:[...(previous.images??[]),{id:Crypto.randomUUID(),uri:imageRequest.uri,x:175,y:240,width:imageRequest.width,height:imageRequest.height}]}});onHistory()},[imageRequest?.version]);
  const back=()=>{const next=undo(page.id,content);if(next){setContent(next);onHistory()}};
  const forward=()=>{const next=redo(page.id,content);if(next){setContent(next);onHistory()}};
  const h=historyState(page.id);
