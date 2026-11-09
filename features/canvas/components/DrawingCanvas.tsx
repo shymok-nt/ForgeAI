@@ -440,7 +440,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   blocked.value=false;
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
   if(tool==='hand'){baseX.value=offsetX.value;baseY.value=offsetY.value;return}
-  if(imagePaintBounds.value){
+  if(imageBounds.value&&imagePaintBounds.value){
    // Hit-test the actually painted image, not the persisted rectangle.
    // The painted geometry is frozen to prevent jitter, so after a pinch
    // the old rectangle no longer matches the image on screen.
@@ -486,15 +486,6 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    const corners:[[number,number],[number,number],[number,number],[number,number]]=[
     [b[0]-selectionPaddingValue.value,b[1]-selectionPaddingValue.value],[b[2]+selectionPaddingValue.value,b[1]-selectionPaddingValue.value],[b[0]-selectionPaddingValue.value,b[3]+selectionPaddingValue.value],[b[2]+selectionPaddingValue.value,b[3]+selectionPaddingValue.value]
    ].map(([x,y])=>[cx+(x-cx)*cos-(y-cy)*sin,cy+(x-cx)*sin+(y-cy)*cos]) as [[number,number],[number,number],[number,number],[number,number]];
-   // Dedicated mouse rotation handle above the selection, independent of resize.
-   const rotateX=cx+(0)*cos-(-48/(fitWidth*zoom.value)-(b[3]-b[1])/2)*sin;
-   const rotateY=cy+(0)*sin+(-48/(fitWidth*zoom.value)-(b[3]-b[1])/2)*cos;
-   if(Platform.OS==='web'&&Math.hypot(p[0]-rotateX,p[1]-rotateY)<=cornerRadius){
-    selectionPreviewLive.value=true;cornerActive.value=true;cornerMode.value=2;
-    cornerCenterX.value=cx;cornerCenterY.value=cy;cornerStartX.value=rotateX;cornerStartY.value=rotateY;
-    cornerStartPageX.value=p[0];cornerStartPageY.value=p[1];cornerStartRadius.value=Math.max(1,Math.hypot(rotateX-cx,rotateY-cy));
-    gestureScale.value=1;gestureAngle.value=0;samples.value=[];drawing.value=false;draft.value='';return;
-   }
    let cornerHit=false;
    for(const corner of corners){
     if(Math.hypot(p[0]-corner[0],p[1]-corner[1])<=cornerRadius){
@@ -683,7 +674,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   blocked.value=true;
  }).runOnJS(false);
  const rotation=Gesture.Rotation().onBegin(()=>{
-  if(imageBounds.value){imageGestureLocked.value=true;imagePinching.value=true;imageRotateActive.value=true;blocked.value=true;return;}
+  if(imageBounds.value){imageGestureLocked.value=true;imagePinching.value=true;imageRotateActive.value=true;blocked.value=true;samples.value=[];drawing.value=false;draft.value='';return;}
   if(tool==='select'&&selectionBoundsValue.value){rotateActive.value=true;}
  }).onUpdate(e=>{
   if(imageGestureLocked.value){imageAngle.value=e.rotation;return;}
@@ -725,7 +716,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    const x=bounds[0]-padding,y=bounds[1]-padding,w=bounds[2]-bounds[0]+2*padding,h=bounds[3]-bounds[1]+2*padding;
    return <Group origin={vec((bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2)} transform={[{rotate:rotation}]}>
     <Rect x={x} y={y} width={w} height={h} color="#3388EE" style="stroke" strokeWidth={1.5}/>
-    {Platform.OS==='web'&&<><Line p1={vec(x+w/2,y)} p2={vec(x+w/2,y-48/(fitWidth*zoom.value))} color="#3388EE" strokeWidth={2}/><Circle cx={x+w/2} cy={y-48/(fitWidth*zoom.value)} r={10/(fitWidth*zoom.value)} color="#FFFFFF"/><Circle cx={x+w/2} cy={y-48/(fitWidth*zoom.value)} r={10/(fitWidth*zoom.value)} color="#3388EE" style="stroke" strokeWidth={2}/></>}
+
     {[[x,y],[x+w,y],[x,y+h],[x+w,y+h]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
    </Group>;
   })()}
