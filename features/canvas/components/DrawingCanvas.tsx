@@ -239,9 +239,9 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  ]);
  const deleteSelectedImage=()=>{const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).filter(i=>i.id!==id)});setImageId(null);onImageSelectionChange?.(null);setDisplayImageId(null);paintedImageIdRef.current=null;};
  const imageDeleteHit=(x:number,y:number)=>{const id=imageIdRef.current;if(!id)return false;const i=(content.images??[]).find(item=>item.id===id);if(!i)return false;const cx=i.x+i.width/2,cy=i.y+i.height/2,a=i.rotation??0;
- const hx=i.x+i.width-30,hy=i.y+30,dx=hx-cx,dy=hy-cy;
+ const hx=i.x+i.width-40,hy=i.y+40,dx=hx-cx,dy=hy-cy;
  const rx=cx+dx*Math.cos(a)-dy*Math.sin(a),ry=cy+dx*Math.sin(a)+dy*Math.cos(a);
- return Math.hypot(x-rx,y-ry)<=Math.max(12,15/(fitWidth*zoom.value));};
+ return Math.hypot(x-rx,y-ry)<=Math.max(23,25/(fitWidth*zoom.value));};
  const selectAt=(x:number,y:number)=>{
   if(imageDeleteHit(x,y)){deleteSelectedImage();return;}
   const image=[...(content.images??[])].reverse().find(i=>{const cx=i.x+i.width/2,cy=i.y+i.height/2,a=-(i.rotation??0),dx=x-cx,dy=y-cy,px=dx*Math.cos(a)-dy*Math.sin(a)+cx,py=dx*Math.sin(a)+dy*Math.cos(a)+cy;return px>=i.x&&px<=i.x+i.width&&py>=i.y&&py<=i.y+i.height});
@@ -702,10 +702,9 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <Group transform={transform}>
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
  {(content.images??[]).map(source=>{const item=source.id===displayImageId&&paintedImage?paintedImage:source;const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/><Group>
-     <Circle cx={item.x+item.width-30} cy={item.y+30} r={15} color="#FFFFFF"/>
-     <Circle cx={item.x+item.width-30} cy={item.y+30} r={15} color="#E5484D" style="stroke" strokeWidth={2}/>
-     <Rect x={item.x+item.width-35} y={item.y+27} width={10} height={9} color="#E5484D" style="stroke" strokeWidth={1.8}/>
-     <Line p1={vec(item.x+item.width-37,item.y+25)} p2={vec(item.x+item.width-23,item.y+25)} color="#E5484D" strokeWidth={2}/>
+     <Circle cx={item.x+item.width-40} cy={item.y+40} r={23} color="#FFFFFF"/>
+     <Circle cx={item.x+item.width-40} cy={item.y+40} r={23} color="#E5484D" style="stroke" strokeWidth={2.5}/>
+     <Path path={`M ${item.x+item.width-51} ${item.y+33} L ${item.x+item.width-29} ${item.y+33} M ${item.x+item.width-46} ${item.y+29} L ${item.x+item.width-34} ${item.y+29} M ${item.x+item.width-49} ${item.y+37} L ${item.x+item.width-47} ${item.y+52} Q ${item.x+item.width-40} ${item.y+55} ${item.x+item.width-33} ${item.y+52} L ${item.x+item.width-31} ${item.y+37} M ${item.x+item.width-43} ${item.y+40} L ${item.x+item.width-43} ${item.y+49} M ${item.x+item.width-37} ${item.y+40} L ${item.x+item.width-37} ${item.y+49}`} color="#E5484D" style="stroke" strokeWidth={2.7} strokeCap="round" strokeJoin="round"/>
     </Group>{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={x} cy={y} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></Group>)}</>}</Group>;return item.id===displayImageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
