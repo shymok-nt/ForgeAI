@@ -20,7 +20,7 @@ const overlaps=(a:Bounds,b:Bounds)=>a[0]<=b[2]&&a[2]>=b[0]&&a[1]<=b[3]&&a[3]>=b[
 const pathLength=(points:P[])=>points.slice(1).reduce((sum,p,i)=>sum+Math.hypot(p[0]-points[i][0],p[1]-points[i][1]),0);
 export function pixelErase(elements:Element[],path:P[],radius:number,wholeStroke=false):Element[]{
  if(!path.length)return elements;
- const eraserBox=bbox(path,radius);
+ const eraserBox=bbox(path,radius+80);
  let changed=false;
  const result:Element[]=[];
  for(const e of elements){
@@ -28,7 +28,7 @@ export function pixelErase(elements:Element[],path:P[],radius:number,wholeStroke
   if(e.type==='shape'){
    // Vector shapes retain whole-element erasing until outline clipping is supported.
    const corners:P[]=[[e.bbox[0],e.bbox[1],0.5],[e.bbox[2],e.bbox[1],0.5],[e.bbox[0],e.bbox[3],0.5],[e.bbox[2],e.bbox[3],0.5]];
-   if(corners.some(p=>near(p,path,radius+e.stroke.width/2)<=0)){changed=true;continue}
+   if(corners.some(p=>near(p,path,radius+e.stroke.width/2)<=0)||near([(e.bbox[0]+e.bbox[2])/2,(e.bbox[1]+e.bbox[3])/2,0.5],path,radius+e.stroke.width/2)<=0){changed=true;continue}
    result.push(e);continue;
   }
   const original:P[]=[];
@@ -39,7 +39,7 @@ export function pixelErase(elements:Element[],path:P[],radius:number,wholeStroke
   const dense:P[]=[original[0]];
   for(let i=1;i<original.length;i++){
    const a=original[i-1],b=original[i],length=Math.hypot(b[0]-a[0],b[1]-a[1]);
-   const count=Math.max(1,Math.ceil(length/Math.max(0.8,r/3)));
+   const count=Math.max(1,Math.ceil(length/1));
    for(let j=1;j<=count;j++)dense.push(lerp(a,b,j/count));
   }
   const flags=dense.map(p=>near(p,path,r)<=0);
