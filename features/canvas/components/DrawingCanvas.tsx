@@ -1,6 +1,6 @@
 import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {View,PixelRatio,type LayoutChangeEvent} from 'react-native';
-import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,useImage,vec} from '@shopify/react-native-skia';
+import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,useImage,Skia,vec} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector} from 'react-native-gesture-handler';
 import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
@@ -103,7 +103,8 @@ const StrokeLayer=memo(function StrokeLayer({element}:{element:Element}){
  return <Path path={path} color={element.color} opacity={element.opacity} blendMode={element.tool==='highlighter'?'multiply':'srcOver'} {...(element.renderMode==='centerline'?{style:'stroke' as const,strokeWidth:element.width,strokeCap:'round' as const,strokeJoin:'round' as const}:{})}/>;
 });
 const PageImageLayer=memo(function PageImageLayer({item}:{item:import('@/features/canvas/types').PageImage}){
- const image=useImage(item.uri);
+ const data=useMemo(()=>{try{return Skia.Data.fromBase64(item.uri.split(',')[1]??'')}catch{return null}},[item.uri]);
+ const image=useImage(data);
  return image?<SkiaImage image={image} x={item.x} y={item.y} width={item.width} height={item.height} fit="contain"/>:null;
 });
 const Completed=memo(function Completed({content,hiddenIds}:{content:PageContent;hiddenIds?:string[]}){
@@ -134,6 +135,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const eraserRadius=useDerivedValue(()=>eraserWidth.value/2);
  const cursorOpacity=useDerivedValue(()=>cursorOn.value?0.6:0);
  const draft=useSharedValue(''),baseZoom=useSharedValue(1),baseX=useSharedValue(0),baseY=useSharedValue(0),pinchX=useSharedValue(0),pinchY=useSharedValue(0);
+ const pinchPageX=useSharedValue(0),pinchPageY=useSharedValue(0);
  const samples=useSharedValue<Sample[]>([]),blocked=useSharedValue(false),drawing=useSharedValue(false);
  const dragX=useSharedValue(0),dragY=useSharedValue(0),draggingSelection=useSharedValue(false);
  const dragPending=useSharedValue(false);
@@ -495,7 +497,12 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    gestureCenterY.value=(bounds[1]+bounds[3])/2;
    runOnJS(notify)(true);return;
   }
-  blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value;pinchX.value=0;pinchY.value=0}).onUpdate(e=>{
+  blocked.value=true;samples.value=[];draft.value='';drawing.value=false;
+  baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value;
+  pinchX.value=e.focalX;pinchY.value=e.focalY;
+  pinchPageX.value=(e.focalX-originX.value)/(fitWidth*zoom.value);
+  pinchPageY.value=(e.focalY-originY.value)/(fitWidth*zoom.value);
+ }).onUpdate(e=>{
   if(tool==='select'&&selectionBoundsValue.value){
    gestureScale.value=Math.max(0.15,Math.min(8,e.scale));
    gestureDX.value=(e.focalX-gestureFocalX.value)/(fitWidth*zoom.value);
@@ -503,8 +510,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    return;
   }
   const z=Math.max(minZoom,Math.min(5,baseZoom.value*e.scale));
-  if(pinchX.value===0&&pinchY.value===0){pinchX.value=e.focalX;pinchY.value=e.focalY}
-  const [x,y]=clamp(z,baseX.value+e.focalX-pinchX.value,baseY.value+e.focalY-pinchY.value);zoom.value=z;offsetX.value=x;offsetY.value=y;
+  const newWidth=PAGE_WIDTH*fitWidth*z;
+  const desiredX=e.focalX-pinchPageX.value*fitWidth*z-(size.width-newWidth)/2;
+  const desiredY=e.focalY-pinchPageY.value*fitWidth*z;
+  const [x,y]=clamp(z,desiredX,desiredY);
+  zoom.value=z;offsetX.value=x;offsetY.value=y;
  }).onEnd(()=>{
   if(tool==='select'&&transformActive.value){
    pinchActive.value=false;
