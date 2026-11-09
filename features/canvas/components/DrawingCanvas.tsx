@@ -5,7 +5,8 @@ import {Gesture,GestureDetector} from 'react-native-gesture-handler';
 import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement} from '@/features/canvas/types';
-import {makeStroke,strokePath,strokeHit} from '@/features/canvas/engine/geometry';
+import {makeStroke,strokePath} from '@/features/canvas/engine/geometry';
+import {round} from '@/features/canvas/engine/content';
 import {pixelErase} from '@/features/canvas/engine/pixelEraser';
 import {shapePath,makeShape,lassoSelect,moveElement,scaleElement,rotateElement} from '@/features/canvas/engine/shapes';
 import type {ShapeKind,Element} from '@/features/canvas/types';
@@ -23,9 +24,27 @@ const cachedPath=(element:Element)=>{
  if(pathCache.size>2500){for(const id of Array.from(pathCache.keys()).slice(0,500))pathCache.delete(id)}
  return path;
 };
-const Completed=memo(function Completed({content,view}:{content:PageContent;view:[number,number,number,number]}){
- const paths=useMemo(()=>content.elements.filter(s=>{const b=s.bbox;return b[2]>=view[0]&&b[0]<=view[2]&&b[3]>=view[1]&&b[1]<=view[3]}).map(s=>({element:s,path:cachedPath(s)})).sort((a,b)=>((a.element.type==='stroke'&&a.element.tool==='highlighter')?0:1)-((b.element.type==='stroke'&&b.element.tool==='highlighter')?0:1)),[content,view[0],view[1],view[2],view[3]]);
- return <>{paths.map(({element,path})=>element.type==='stroke'?<Path key={element.id} path={path} color={element.color} opacity={element.opacity} blendMode={element.tool==='highlighter'?'multiply':'srcOver'}/>:<React.Fragment key={element.id}>{element.fill&&<Path path={path} color={element.fill.color} opacity={element.fill.opacity} style="fill"/>}<Path path={path} color={element.stroke.color} opacity={element.stroke.opacity} style="stroke" strokeWidth={element.stroke.width}/></React.Fragment>)}</>;
+const StaticPaper=memo(function StaticPaper({template,paperColor}:{template:PageTemplate;paperColor:PaperColor}){
+ const lines=useMemo(()=>{
+  const items:{x1:number;y1:number;x2:number;y2:number}[]=[];
+  if(template==='çizgili'||template==='kareli')for(let y=56;y<PAGE_HEIGHT;y+=42)items.push({x1:0,y1:y,x2:PAGE_WIDTH,y2:y});
+  if(template==='kareli')for(let x=42;x<PAGE_WIDTH;x+=42)items.push({x1:x,y1:0,x2:x,y2:PAGE_HEIGHT});
+  return items;
+ },[template]);
+ const dots=useMemo(()=>template==='noktalı'?Array.from({length:Math.floor(PAGE_HEIGHT/42)*Math.floor(PAGE_WIDTH/42)},(_,i)=>{const cols=Math.floor(PAGE_WIDTH/42);return [i%cols*42+21,Math.floor(i/cols)*42+21] as const}):[],[template]);
+ return <>
+  <Rect x={0} y={0} width={PAGE_WIDTH} height={PAGE_HEIGHT} color={paperColor==='krem'?'#FFF5DF':'#FFFFFF'}/>
+  {lines.map((l,i)=><Line key={i} p1={vec(l.x1,l.y1)} p2={vec(l.x2,l.y2)} color="#D8DFEE" strokeWidth={1.2}/>)}
+  {dots.map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={1.5} color="#D8DFEE"/>)}
+ </>;
+});
+const StrokeLayer=memo(function StrokeLayer({element}:{element:Element}){
+ const path=useMemo(()=>cachedPath(element),[element]);
+ if(element.type==='shape')return <>{element.fill&&<Path path={path} color={element.fill.color} opacity={element.fill.opacity} style="fill"/>}<Path path={path} color={element.stroke.color} opacity={element.stroke.opacity} style="stroke" strokeWidth={element.stroke.width}/></>;
+ return <Path path={path} color={element.color} opacity={element.opacity} blendMode={element.tool==='highlighter'?'multiply':'srcOver'} {...(element.renderMode==='centerline'?{style:'stroke' as const,strokeWidth:element.width,strokeCap:'round' as const,strokeJoin:'round' as const}:{})}/>;
+});
+const Completed=memo(function Completed({content}:{content:PageContent}){
+ return <>{content.elements.map(element=><StrokeLayer key={element.id} element={element}/>)}</>;
 });
 export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='rect',shapeFill=false,onSelectionChange,selectionAction}:Props){
  const [selectedIds,setSelectedIds]=useState<string[]>([]);
@@ -97,7 +116,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(!drawing.value){drawing.value=true;runOnJS(notify)(true)}
   if(tool==='eraser')return;
   const pts=samples.value;
-  draft.value=pts.map((v,i)=>`${i===0?'M':'L'}${v[0]} ${v[1]}`).join(' ');
+  draft.value=pts.map((v,i)=>`${i===0?'M':'L'}${round(v[0])} ${round(v[1])}`).join(' ');
  }).onEnd(()=>{
   if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;runOnJS(notify)(false);
@@ -111,18 +130,14 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   zoom.value=z;offsetX.value=0;offsetY.value=0;
  });
  const gestures=Gesture.Simultaneous(pan,pinch,doubleTap);
- const paper=paperColor==='krem'?'#FFF5DF':'#FFFFFF',line='#D8DFEE';
- const templateLines=useMemo(()=>{const items:{x1:number;y1:number;x2:number;y2:number}[]=[];if(template==='çizgili'||template==='kareli')for(let y=56;y<PAGE_HEIGHT;y+=42)items.push({x1:0,y1:y,x2:PAGE_WIDTH,y2:y});if(template==='kareli')for(let x=42;x<PAGE_WIDTH;x+=42)items.push({x1:x,y1:0,x2:x,y2:PAGE_HEIGHT});return items},[template]);
- const view:[number,number,number,number]=[-PAGE_WIDTH,-PAGE_HEIGHT,PAGE_WIDTH*2,PAGE_HEIGHT*2];
+
  return <View onLayout={layout} style={{flex:1,overflow:'hidden'}}>
  <GestureDetector gesture={gestures}><View style={{flex:1}}><Canvas style={{flex:1}}>
  <Group transform={transform}>
- <Rect x={0} y={0} width={PAGE_WIDTH} height={PAGE_HEIGHT} color={paper}/>
- {templateLines.map((l,i)=><Line key={i} p1={vec(l.x1,l.y1)} p2={vec(l.x2,l.y2)} color={line} strokeWidth={1.2}/>)}
- {template==='noktalı'&&Array.from({length:Math.floor(PAGE_HEIGHT/42)*Math.floor(PAGE_WIDTH/42)},(_,i)=>{const cols=Math.floor(PAGE_WIDTH/42);return <Circle key={i} cx={(i%cols)*42+21} cy={Math.floor(i/cols)*42+21} r={1.5} color={line}/>})}
- <Completed content={content} view={view}/>
+ <StaticPaper template={template} paperColor={paperColor}/>
+ <Completed content={content}/>
  {selectedIds.length>0&&(()=>{const es=content.elements.filter(e=>selectedIds.includes(e.id));if(!es.length)return null;const b=[Math.min(...es.map(e=>e.bbox[0])),Math.min(...es.map(e=>e.bbox[1])),Math.max(...es.map(e=>e.bbox[2])),Math.max(...es.map(e=>e.bbox[3]))];return <><Rect x={b[0]} y={b[1]} width={b[2]-b[0]} height={b[3]-b[1]} color="#3388EE" style="stroke" strokeWidth={2}/>{[[b[0],b[1]],[b[2],b[1]],[b[0],b[3]],[b[2],b[3]]].map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={7} color="#FFFFFF"/>)}</>})()}
 
- <Path path={draft} color={brush.color} opacity={tool==='highlighter'?0.35:brush.opacity} style="stroke" strokeWidth={tool==='highlighter'?brush.width*5:brush.width} strokeCap="round" strokeJoin="round"/>
+ <Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>
  </Group></Canvas></View></GestureDetector></View>;
 }
