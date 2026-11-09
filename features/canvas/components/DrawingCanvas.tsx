@@ -98,7 +98,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const samples=useSharedValue<Sample[]>([]),blocked=useSharedValue(false),drawing=useSharedValue(false);
  const dragX=useSharedValue(0),dragY=useSharedValue(0),draggingSelection=useSharedValue(false);
  const dragPending=useSharedValue(false);
- const selectedHit=useSharedValue(false);
+
  const selectedElements=useMemo(()=>content.elements.filter(e=>selectedIds.includes(e.id)),[content,selectedIds]);
  const selectedBounds=useMemo(()=>{
   if(!selectedElements.length)return null;
@@ -193,7 +193,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(tool==='select'){
    const p=pagePoint(e.x,e.y),b=selectionBoundsValue.value;
    const margin=12/(fitWidth*zoom.value);
-   selectedHit.value=!!(b&&p[0]>=b[0]-margin&&p[0]<=b[2]+margin&&p[1]>=b[1]-margin&&p[1]<=b[3]+margin);
+   // A press on the current selection is eligible for long-press dragging.
   }
   samples.value=[pagePoint(e.x,e.y)];drawing.value=false;draft.value='';
   if(tool==='eraser'){
@@ -236,7 +236,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
   if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;cursorOn.value=false;runOnJS(notify)(false);
- }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false;selectedHit.value=false}).runOnJS(false);
+ }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false}).runOnJS(false);
  const hold=Gesture.LongPress().minDuration(320).maxDistance(14).onStart(e=>{
   if(tool!=='select'||blocked.value)return;
   const p=pagePoint(e.x,e.y);
@@ -245,7 +245,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   draggingSelection.value=true;
   dragX.value=0;dragY.value=0;
   drawing.value=true;runOnJS(notify)(true);
- }).onEnd(()=>{draggingSelection.value=false;}).runOnJS(false);
+ }).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(()=>{blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value;pinchX.value=0;pinchY.value=0}).onUpdate(e=>{
   const z=Math.max(minZoom,Math.min(5,baseZoom.value*e.scale));
   if(pinchX.value===0&&pinchY.value===0){pinchX.value=e.focalX;pinchY.value=e.focalY}
