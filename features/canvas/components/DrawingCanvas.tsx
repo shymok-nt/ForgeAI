@@ -164,6 +164,21 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const handoffElements=handoffCommitted?selectedElements:handoff?.elements??[];
  const handoffBounds=handoffCommitted&&selectedBounds?selectedBounds:handoff?.bounds??null;
  const handoffRotation=handoffCommitted?selectedRotation:handoff?.rotation??0;
+ // The selection border has a constant screen-space inset while the
+ // shape scales. Without this correction its 10px padding scales too,
+ // so the frame visibly jumps when the saved geometry replaces the preview.
+ const selectionInset=useDerivedValue(()=>10/Math.max(0.15,gestureScale.value));
+ const selectionHandleRadius=useDerivedValue(()=>6/Math.max(0.15,gestureScale.value));
+ const selectionFrameX=useDerivedValue(()=>(selectedBounds?.[0]??0)-selectionInset.value);
+ const selectionFrameY=useDerivedValue(()=>(selectedBounds?.[1]??0)-selectionInset.value);
+ const selectionFrameW=useDerivedValue(()=>(selectedBounds?.[2]??0)-(selectedBounds?.[0]??0)+2*selectionInset.value);
+ const selectionFrameH=useDerivedValue(()=>(selectedBounds?.[3]??0)-(selectedBounds?.[1]??0)+2*selectionInset.value);
+ const selectionCorners=[
+  [useDerivedValue(()=>selectionFrameX.value),useDerivedValue(()=>selectionFrameY.value)],
+  [useDerivedValue(()=>selectionFrameX.value+selectionFrameW.value),useDerivedValue(()=>selectionFrameY.value)],
+  [useDerivedValue(()=>selectionFrameX.value),useDerivedValue(()=>selectionFrameY.value+selectionFrameH.value)],
+  [useDerivedValue(()=>selectionFrameX.value+selectionFrameW.value),useDerivedValue(()=>selectionFrameY.value+selectionFrameH.value)]
+ ] as const;
  const selectionBoundsValue=useSharedValue<readonly [number,number,number,number]|null>(null);
  useEffect(()=>{selectionBoundsValue.value=selectedBounds;},[selectedBounds]);
  const dragTransform=useDerivedValue(()=>[{translateX:dragX.value},{translateY:dragY.value}]);
@@ -504,8 +519,8 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  </Group>
  {tool==='select'&&selectedBounds&&!handoff&&<Group transform={selectionTransform}>
   <Group origin={vec((selectedBounds[0]+selectedBounds[2])/2,(selectedBounds[1]+selectedBounds[3])/2)} transform={[{rotate:selectedRotation}]}>
-   <Rect x={selectedBounds[0]-10} y={selectedBounds[1]-10} width={selectedBounds[2]-selectedBounds[0]+20} height={selectedBounds[3]-selectedBounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
-   {[[selectedBounds[0]-10,selectedBounds[1]-10],[selectedBounds[2]+10,selectedBounds[1]-10],[selectedBounds[0]-10,selectedBounds[3]+10],[selectedBounds[2]+10,selectedBounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
+   <Rect x={selectionFrameX} y={selectionFrameY} width={selectionFrameW} height={selectionFrameH} color="#3388EE" style="stroke" strokeWidth={1.5}/>
+   {selectionCorners.map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={selectionHandleRadius} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={selectionHandleRadius} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
   </Group>
  </Group>}
  {tool==='select'&&handoff&&handoffBounds&&<Group transform={handoffCommitted?[]:[
