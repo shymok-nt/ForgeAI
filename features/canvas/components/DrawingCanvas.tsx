@@ -397,11 +397,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    const startX=cornerStartX.value-cx,startY=cornerStartY.value-cy;
    const tangent=(-startY*dx+startX*dy)/cornerStartRadius.value;
    const radial=(startX*dx+startY*dy)/cornerStartRadius.value;
-   // Vertical dragging changes size; sweeping around the selection rotates it.
+   // Dragging away from the center grows; dragging toward it shrinks on every corner.
    if(cornerMode.value===0&&Math.hypot(dx,dy)>8/(fitWidth*zoom.value))
-    cornerMode.value=Math.abs(dy)>Math.abs(dx)*1.35?1:Math.abs(tangent)>Math.abs(radial)*0.7?2:1;
+    cornerMode.value=Math.abs(tangent)>Math.abs(radial)*1.25?2:1;
    if(cornerMode.value===1){
-    gestureScale.value=Math.max(0.15,Math.min(8,1+dy/Math.max(80,cornerStartRadius.value)));
+    gestureScale.value=Math.max(0.15,Math.min(8,Math.hypot(p[0]-cx,p[1]-cy)/cornerStartRadius.value));
     gestureAngle.value=0;
    }else if(cornerMode.value===2){
     const angle=Math.atan2(p[1]-cy,p[0]-cx);
