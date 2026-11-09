@@ -59,11 +59,12 @@ export default function CanvasLab(){
   const x0=lastX.value,y0=lastY.value,dx=x-x0,dy=y-y0;
   const step=Math.max(0.5,radius.value/4);
   const n=Math.max(1,Math.ceil(Math.hypot(dx,dy)/step));
-  const path=Skia.Path.Make();path.moveTo(x0*ratio,y0*ratio);
-  for(let i=1;i<=n;i++)path.lineTo((x0+dx*i/n)*ratio,(y0+dy*i/n)*ratio);
+  let svg='M'+(x0*ratio)+' '+(y0*ratio);
+  for(let i=1;i<=n;i++)svg+=' L'+((x0+dx*i/n)*ratio)+' '+((y0+dy*i/n)*ratio);
+  const path=Skia.Path.MakeFromSVGString(svg);
   const p=Skia.Paint();p.setAntiAlias(true);p.setBlendMode(BlendMode.Clear);
   p.setStyle(1);p.setStrokeCap(1);p.setStrokeJoin(1);p.setStrokeWidth(radius.value*2*ratio);
-  s.getCanvas().drawPath(path,p);
+  if(path)s.getCanvas().drawPath(path,p);
   lastX.value=x;lastY.value=y;publish();
  };
  const pan=Gesture.Pan().minDistance(0).maxPointers(1)
@@ -74,18 +75,19 @@ export default function CanvasLab(){
    if(mode.value==='eraser'){
     eraseSegment(e.x,e.y);
    }else{
-    const p=Skia.Path.Make();p.moveTo(e.x*ratio,e.y*ratio);
-    gesturePath.value=p;activePath.value='M'+round(e.x)+' '+round(e.y);
+    const svg='M'+round(e.x*ratio)+' '+round(e.y*ratio);
+    gesturePath.value=Skia.Path.MakeFromSVGString(svg);activePath.value=svg;
    }
   })
   .onUpdate(e=>{
    if(!drawing.value)return;
    cursorX.value=e.x;cursorY.value=e.y;
    if(mode.value==='eraser'){eraseSegment(e.x,e.y);return}
-   const p=gesturePath.value;if(!p)return;
-   p.lineTo(e.x*ratio,e.y*ratio);
-   lastX.value=e.x;lastY.value=e.y;
-   activePath.value=p.toSVGString();
+   if(!gesturePath.value)return;
+   const svg=activePath.value+' L'+round(e.x*ratio)+' '+round(e.y*ratio);
+   const p=Skia.Path.MakeFromSVGString(svg);if(!p)return;
+   gesturePath.value=p;lastX.value=e.x;lastY.value=e.y;
+   activePath.value=svg;
   })
   .onEnd(()=>{
    if(!drawing.value)return;
@@ -120,9 +122,10 @@ export default function CanvasLab(){
   p.setAntiAlias(true);p.setColor(Skia.Color(INK));p.setStyle(PaintStyle.Stroke);p.setStrokeWidth(4*ratio);p.setStrokeCap(StrokeCap.Round);p.setStrokeJoin(StrokeJoin.Round);
   for(let i=0;i<1000;i++){
    const x=(12+Math.random()*(viewport.width-24))*ratio,y=(12+Math.random()*(viewport.height-24))*ratio;
-   const path=Skia.Path.Make();path.moveTo(x,y);
-   for(let j=1;j<=12;j++)path.lineTo(x+j*2.5*ratio,y+Math.sin(j*0.8+i)*7*ratio);
-   canvas.drawPath(path,p);
+   let svg='M'+x+' '+y;
+   for(let j=1;j<=12;j++)svg+=' L'+(x+j*2.5*ratio)+' '+(y+Math.sin(j*0.8+i)*7*ratio);
+   const path=Skia.Path.MakeFromSVGString(svg);
+   if(path)canvas.drawPath(path,p);
   }
   publish();benchmark.value=Date.now()-t;
   setStats(v=>({...v,bench:benchmark.value}));
