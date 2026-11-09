@@ -6,7 +6,6 @@ import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement} from '@/features/canvas/types';
 import {makeStroke,strokePath} from '@/features/canvas/engine/geometry';
-import {round} from '@/features/canvas/engine/content';
 import {pixelErase} from '@/features/canvas/engine/pixelEraser';
 import {shapePath,makeShape,lassoSelect,moveElement,scaleElement,rotateElement} from '@/features/canvas/engine/shapes';
 import type {ShapeKind,Element} from '@/features/canvas/types';
@@ -116,11 +115,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(!drawing.value){drawing.value=true;runOnJS(notify)(true)}
   if(tool==='eraser')return;
   const pts=samples.value;
-  draft.value=pts.map((v,i)=>`${i===0?'M':'L'}${round(v[0])} ${round(v[1])}`).join(' ');
+  draft.value=pts.map((v,i)=>`${i===0?'M':'L'}${Math.round(v[0]*10)/10} ${Math.round(v[1]*10)/10}`).join(' ');
  }).onEnd(()=>{
   if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;runOnJS(notify)(false);
- }).onFinalize(()=>{samples.value=[];draft.value='';drawing.value=false;blocked.value=false}).runOnJS(false);
+ }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false}).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(()=>{blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value}).onUpdate(e=>{
   const z=Math.max(minZoom,Math.min(5,baseZoom.value*e.scale));
   const [x,y]=clamp(z,baseX.value,baseY.value);zoom.value=z;offsetX.value=x;offsetY.value=y;
