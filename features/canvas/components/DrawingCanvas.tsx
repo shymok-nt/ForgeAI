@@ -338,7 +338,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    }
    if(cornerHit){samples.value=[];drawing.value=false;draft.value='';return;}
    const hitSlop=12/(fitWidth*zoom.value);
-   const cos=Math.cos(selectedRotationValue.value),sin=Math.sin(selectedRotationValue.value);
+   // Reuse the rotation matrix from the handle hit test above.
     const localX=cx+(p[0]-cx)*cos+(p[1]-cy)*sin;
     const localY=cy-(p[0]-cx)*sin+(p[1]-cy)*cos;
     if(localX>=b[0]-hitSlop&&localX<=b[2]+hitSlop&&localY>=b[1]-hitSlop&&localY<=b[3]+hitSlop){
