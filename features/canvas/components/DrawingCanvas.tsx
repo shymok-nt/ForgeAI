@@ -442,7 +442,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  }).onBegin(e=>{
   if(e.numberOfPointers!==1||imageGestureLocked.value)return;
   const isStylus=e.pointerType===PointerType.STYLUS;
-  if((penSettings.stylusOnly||!penSettings.fingerDraw)&&!isStylus&&['pen','highlighter','eraser','shape'].includes(tool)){blocked.value=true;samples.value=[];draft.value='';drawing.value=false;return;}
+  if((penSettings.stylusOnly||!penSettings.fingerDraw)&&!isStylus&&['pen','highlighter','eraser','shape'].includes(tool)&&!imageBounds.value){blocked.value=true;samples.value=[];draft.value='';drawing.value=false;return;}
   // A previous two-finger gesture must not disable the next one-finger drag.
   blocked.value=false;
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
