@@ -77,6 +77,7 @@ export default function NoteCanvasScreen(){
  const chooseColor=(color:string)=>{setBrush(b=>({...b,color}));setRecent(r=>[color,...r.filter(x=>x!==color)].slice(0,8))};
  const ink=colors.ink,muted=colors.muted;const backdrop=scheme==='dark'?'#0B0B10':'#EEE9DF';
  const control=(name:string,Icon:typeof ArrowLeft,onPress:()=>void,disabled=false)=> <Pressable accessibilityRole="button" accessibilityLabel={name} accessibilityState={{disabled}} disabled={disabled} hitSlop={4} onPress={onPress} style={[hit,{opacity:disabled?0.35:1}]}><Icon size={22} color={ink}/></Pressable>;
+ const selectedDeleteButton=(selectedImageId||selectedElements.length>0)?<Pressable accessibilityRole="button" accessibilityLabel={selectedImageId?'Seçili resmi sil':'Seçili şekilleri sil'} onPress={()=>{if(selectedImageId)editImage('delete');else action('delete');}} hitSlop={10} style={{width:48,height:48,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:colors.coral+'16',marginHorizontal:4}}><Trash2 size={25} strokeWidth={2.2} color={colors.coral}/></Pressable>:null;
  const undoButton=control('Geri al',Undo2,()=>controllerRef.current?.back(),!controller?.canUndo);
  const redoButton=control('Yinele',Redo2,()=>controllerRef.current?.forward(),!controller?.canRedo);
  const status=controller?.error?'Kaydedilemedi, tekrar denenecek':controller?.saving?'Kaydediliyor…':'Kaydedildi';
@@ -100,7 +101,7 @@ export default function NoteCanvasScreen(){
  return <SafeAreaView style={{flex:1,backgroundColor:backdrop}}>
  {!focus&&<View style={{minHeight:tablet?82:80,paddingTop:10,paddingBottom:8,flexDirection:'row',alignItems:'center',paddingHorizontal:tablet?12:4,zIndex:100,elevation:20,overflow:'visible',backgroundColor:colors.surface,borderBottomWidth:1,borderColor:colors.divider}}>
  {heading}{tablet&&<View style={{flex:1,alignItems:'center',flexDirection:'row',justifyContent:'center',gap:8}}><CanvasToolbar tablet tool={tool} colors={colors} onTool={chooseTool} onPages={()=>setSheet(true)} onImage={()=>void insertImage()} toolPanel={toolPanel} panelOpen={panel==='tool'} onClosePanel={()=>setPanel(null)}/><Pressable accessibilityRole="button" accessibilityLabel="Renk paleti" onPress={()=>setPanel(p=>p==='palette'?null:'palette')} style={[hit,{width:44}]}><View style={{width:32,height:32,borderRadius:16,backgroundColor:brush.color,borderWidth:3,borderColor:colors.border}}/></Pressable></View>}
- {undoButton}{redoButton}{control('Diğer',Ellipsis,more)}{tablet&&control('Odak modu',Eye,()=>setFocus(true))}
+ {selectedDeleteButton}{undoButton}{redoButton}{control('Diğer',Ellipsis,more)}{tablet&&control('Odak modu',Eye,()=>setFocus(true))}
  </View>}
  <View style={{flex:1,flexDirection:'row'}}>
  {tablet&&!focus&&<View style={{width:132,backgroundColor:colors.background,borderRightWidth:1,borderRightColor:colors.divider}}><CanvasPageStrip tablet pages={pages} selectedId={selected?.id} colors={colors} onSelect={select} onAdd={()=>void addPage()} onRemove={askRemove} onMove={(p,i)=>void move(p,i)} onActions={pageActions}/></View>}
