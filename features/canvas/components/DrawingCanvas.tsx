@@ -370,7 +370,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
     const localX=cx+(p[0]-cx)*cos+(p[1]-cy)*sin;
     const localY=cy-(p[0]-cx)*sin+(p[1]-cy)*cos;
     if(localX>=b[0]-hitSlop&&localX<=b[2]+hitSlop&&localY>=b[1]-hitSlop&&localY<=b[3]+hitSlop){
-    draggingSelection.value=truedragX.value=0;dragY.value=0;
+    draggingSelection.value=true;dragX.value=0;dragY.value=0;
     samples.value=[];drawing.value=false;draft.value='';
     return;
    }
