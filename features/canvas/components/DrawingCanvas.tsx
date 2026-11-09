@@ -1,7 +1,8 @@
 import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {View,PixelRatio,Platform,type LayoutChangeEvent} from 'react-native';
 import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,Skia,vec} from '@shopify/react-native-skia';
-import {Gesture,GestureDetector} from 'react-native-gesture-handler';
+import {Gesture,GestureDetector,PointerType} from 'react-native-gesture-handler';
+import {useSettingsStore} from '@/store/settingsStore';
 import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement} from '@/features/canvas/types';
@@ -122,6 +123,7 @@ const Completed=memo(function Completed({content,hiddenIds}:{content:PageContent
  return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)).map(element=><StrokeLayer key={element.id} element={element}/>)}</>;
 });
 export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false,onImageSelectionChange,imageAction}:Props){
+ const penSettings=useSettingsStore(state=>state.penSettings);
  const [selectedIds,setSelectedIds]=useState<string[]>([]);
  const selectedRef=useRef<string[]>([]);selectedRef.current=selectedIds;
  const [imageId,setImageId]=useState<string|null>(null);
@@ -368,6 +370,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
      return;
    }
   const stroke=makeStroke(points,{tool:tool==='highlighter'?'highlighter':'pen',...brush},Crypto.randomUUID(),content.elements.length);
+  if(tool==='pen'&&penSettings.pressureEnabled&&points.some(p=>p[2]!==0.5))stroke.renderMode='outline';
   onChange(withHeight([...content.elements,stroke],stroke.bbox[3]+400));
  };
  const notify=(active:boolean)=>onDrawingActive?.(active);
@@ -438,6 +441,8 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(e.allTouches.length>1){blocked.value=true;imageDragging.value=false;imageDX.value=0;imageDY.value=0;samples.value=[];draft.value='';drawing.value=false}
  }).onBegin(e=>{
   if(e.numberOfPointers!==1||imageGestureLocked.value)return;
+  const isStylus=e.pointerType===PointerType.STYLUS;
+  if((penSettings.stylusOnly||!penSettings.fingerDraw)&&!isStylus&&['pen','highlighter','eraser','shape'].includes(tool)){blocked.value=true;samples.value=[];draft.value='';drawing.value=false;return;}
   // A previous two-finger gesture must not disable the next one-finger drag.
   blocked.value=false;
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
@@ -546,7 +551,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    return;
   }
   if(imageDragging.value){imageDX.value=e.translationX/(fitWidth*zoom.value);imageDY.value=e.translationY/(fitWidth*zoom.value);return}
-  if(imageBounds.value)return;
+  if(blocked.value||imageBounds.value)return;
   if(tool==='hand'){const [x,y]=clamp(zoom.value,baseX.value+e.translationX,baseY.value+e.translationY);offsetX.value=x;offsetY.value=y;return}
   if(cornerActive.value){
    const p=pagePoint(e.x,e.y),cx=cornerCenterX.value,cy=cornerCenterY.value;
@@ -580,6 +585,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
   if(tool==='select')return;
   const p=pagePoint(e.x,e.y),prev=samples.value[samples.value.length-1];
+  if(e.pointerType===PointerType.STYLUS&&penSettings.pressureEnabled&&e.stylusData){
+   const pressure=Math.max(0.05,Math.min(1,e.stylusData.pressure??0.5));
+   p[2]=Math.max(0.05,Math.min(1,0.5+(pressure-0.5)*penSettings.pressureSensitivity));
+  }
   if(prev&&Math.hypot((p[0]-prev[0])*fitWidth*zoom.value,(p[1]-prev[1])*fitWidth*zoom.value)<1.5)return;
   samples.value=[...samples.value,p];
   if(!drawing.value&&Date.now()-downTime.value<70&&Math.hypot(e.x-startX.value,e.y-startY.value)<6)return;
