@@ -149,6 +149,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const gestureCenterX=useSharedValue(0),gestureCenterY=useSharedValue(0);
 
  const selectedElements=useMemo(()=>content.elements.filter(e=>selectedIds.includes(e.id)),[content,selectedIds]);
+ // Only retain a handoff while it represents the same selection.
+ const handoffMatchesSelection=!!handoff&&handoff.elements.length===selectedIds.length&&
+  handoff.elements.every(e=>selectedIds.includes(e.id));
+
  const selectedFrame=useMemo(()=>selectionFrame(selectedElements),[selectedElements]);
  const selectedBounds=selectedFrame?.bounds??null;
  const selectedRotation=selectedFrame?.rotation??0;
@@ -158,9 +162,9 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  // instead of re-projecting the old path. This prevents stale-size flashes.
  // The handoff always contains the FINAL geometry, never an old path.
  // Switching between old and new paths was the source of the release flash.
- const handoffElements=handoff?.elements??[];
- const handoffBounds=handoff?.bounds??null;
- const handoffRotation=handoff?.rotation??0;
+ const handoffElements=handoffMatchesSelection?handoff!.elements:[];
+ const handoffBounds=handoffMatchesSelection?handoff!.bounds:null;
+ const handoffRotation=handoffMatchesSelection?handoff!.rotation:0;
  // The selection border has a constant screen-space inset while the
  // shape scales. Without this correction its 10px padding scales too,
  // so the frame visibly jumps when the saved geometry replaces the preview.
@@ -249,16 +253,16 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
   transformPending.value=false;
  },[handoff]);
- useLayoutEffect(()=>{
-  if(!handoff||!pendingHandoff.current)return;
-  const committed=handoff.elements.every(finalElement=>
-   content.elements.some(element=>element===finalElement)
-  );
-  if(!committed)return;
-  pendingHandoff.current=false;
-  // No animation-frame delay: both branches now paint identical final paths.
-  setHandoff(null);
- },[content,handoff]);
+ // Keep the committed geometry mounted as the selected shape's baseline.
+ // Removing the handoff after React's commit caused a second Skia scene
+ // replacement, briefly repainting the previous geometry on CanvasKit.
+ // It is cleared only when selection/tool identity changes.
+ useEffect(()=>{
+  if(tool!=='select'||selectedIds.length===0){
+   pendingHandoff.current=false;
+   setHandoff(null);
+  }
+ },[tool,selectedIds.length]);
  const selectionStart=useSharedValue<Sample|null>(null);
  const downTime=useSharedValue(0),startX=useSharedValue(0),startY=useSharedValue(0);
  const originX=useDerivedValue(()=>(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value);
@@ -511,17 +515,17 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
- {tool==='select'&&(handoffBounds||selectedBounds)&&<Group transform={handoff?[]:selectionTransform}>
-  {(handoff?handoffElements:selectedElements).map(element=><StrokeLayer key={element.id} element={element}/>)}
+ {tool==='select'&&(handoffBounds||selectedBounds)&&<Group transform={selectionTransform}>
+  {(handoffMatchesSelection?handoffElements:selectedElements).map(element=><StrokeLayer key={element.id} element={element}/>)}
   {(()=>{
    const bounds=handoffBounds??selectedBounds!;
-   const rotation=handoff?handoffRotation:selectedRotation;
+   const rotation=handoffMatchesSelection?handoffRotation:selectedRotation;
    const x=bounds[0]-10,y=bounds[1]-10,w=bounds[2]-bounds[0]+20,h=bounds[3]-bounds[1]+20;
    return <Group origin={vec((bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2)} transform={[{rotate:rotation}]}>
-    {handoff?
+    {handoffMatchesSelection?
      <Rect x={x} y={y} width={w} height={h} color="#3388EE" style="stroke" strokeWidth={1.5}/>:
      <Rect x={selectionFrameX} y={selectionFrameY} width={selectionFrameW} height={selectionFrameH} color="#3388EE" style="stroke" strokeWidth={1.5}/>}
-    {handoff?
+    {handoffMatchesSelection?
      [[x,y],[x+w,y],[x,y+h],[x+w,y+h]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>):
      selectionCorners.map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={selectionHandleRadius} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={selectionHandleRadius} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
    </Group>;
