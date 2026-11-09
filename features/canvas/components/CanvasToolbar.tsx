@@ -1,4 +1,4 @@
-import React from 'react';
+import React,{useState} from 'react';
 import {Pressable,Text,View,ScrollView} from 'react-native';
 import {Pen,Highlighter,Eraser,Hand,Move,Shapes,Type,Image as ImageIcon,PanelsTopLeft} from 'lucide-react-native';
 import type {Tool} from './DrawingCanvas';
@@ -16,12 +16,13 @@ export const tools:{id:UiTool;label:string;icon:typeof Pen;enabled:boolean}[]=[
  {id:'hand',label:'Kaydırma',icon:Hand,enabled:true},
  {id:'pages',label:'Sayfalar',icon:PanelsTopLeft,enabled:true}
 ];
-type Props={tablet:boolean;tool:Tool;colors:ThemeColors;onTool:(tool:Tool)=>void;onPages:()=>void;onImage:()=>void};
-export function CanvasToolbar({tablet,tool,colors,onTool,onPages,onImage}:Props){
+type Props={tablet:boolean;tool:Tool;colors:ThemeColors;onTool:(tool:Tool)=>void;onPages:()=>void;onImage:()=>void;toolPanel?:React.ReactNode;panelOpen?:boolean;onClosePanel?:()=>void};
+export function CanvasToolbar({tablet,tool,colors,onTool,onPages,onImage,toolPanel,panelOpen,onClosePanel}:Props){
+ const [anchorX,setAnchorX]=useState(0);
  const shown=tablet?tools.filter(t=>t.id!=='pages'):tools.filter(t=>t.id!=='hand');
  return <View style={{flexDirection:'row',alignItems:'center',backgroundColor:tablet?colors.background:colors.surfaceRaised,borderRadius:tablet?18:24,paddingHorizontal:4,paddingVertical:tablet?2:8,shadowColor:'#000',shadowOpacity:tablet?0:0.12,shadowRadius:14,elevation:tablet?0:6}}>
  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{alignItems:'center',flexGrow:1,justifyContent:'space-around'}}>
- {shown.map(t=>{const Icon=t.icon;const active=t.id===tool;return <Pressable key={t.id} accessibilityRole="button" accessibilityLabel={t.label} accessibilityState={{selected:active,disabled:!t.enabled}} disabled={!t.enabled} onPress={()=>t.id==='pages'?onPages():t.id==='image'?onImage():onTool(t.id as Tool)} style={{width:tablet?48:46,height:tablet?44:48,alignItems:'center',justifyContent:'center',borderRadius:16,opacity:t.enabled?1:0.4,backgroundColor:active?colors.accent+'1F':'transparent'}}>
+ {shown.map(t=>{const Icon=t.icon;const active=t.id===tool;return <Pressable key={t.id} onLayout={e=>{if(t.id===tool)setAnchorX(e.nativeEvent.layout.x)}} accessibilityRole="button" accessibilityLabel={t.label} accessibilityState={{selected:active,disabled:!t.enabled}} disabled={!t.enabled} onPress={()=>t.id==='pages'?onPages():t.id==='image'?onImage():onTool(t.id as Tool)} style={{width:tablet?48:46,height:tablet?44:48,alignItems:'center',justifyContent:'center',borderRadius:16,opacity:t.enabled?1:0.4,backgroundColor:active?colors.accent+'1F':'transparent'}}>
  <Icon size={22} color={active?colors.accent:colors.ink}/></Pressable>})}
- </ScrollView></View>;
+ </ScrollView>{panelOpen&&toolPanel&&<View style={{position:'absolute',zIndex:100,width:310,left:tablet?Math.max(0,anchorX-120):Math.max(0,anchorX-80),top:tablet?54:undefined,bottom:tablet?undefined:64,padding:16,borderRadius:18,backgroundColor:colors.surfaceRaised,shadowColor:'#000',shadowOpacity:0.16,shadowRadius:18,elevation:12}}><Pressable onPress={onClosePanel} accessibilityLabel="Kapat" style={{alignSelf:'flex-end',padding:6}}><Text style={{color:colors.ink,fontSize:18}}>×</Text></Pressable>{toolPanel}</View>}</View>;
 }
