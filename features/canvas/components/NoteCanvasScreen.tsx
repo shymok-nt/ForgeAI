@@ -50,8 +50,15 @@ export default function NoteCanvasScreen(){
  const undoButton=control('Geri al',Undo2,()=>controllerRef.current?.back(),!controller?.canUndo);
  const redoButton=control('Yinele',Redo2,()=>controllerRef.current?.forward(),!controller?.canRedo);
  const status=controller?.error?'Kaydedilemedi, tekrar denenecek':controller?.saving?'Kaydediliyor…':'Kaydedildi';
+ const goBack=async()=>{
+  // flush() can be absent while the canvas controller is mounting.
+  // Optional chaining before .finally() left the back arrow inert in that case.
+  try{await controllerRef.current?.flush()}catch(error){console.error('Canvas save before navigation failed:',error)}
+  if(router.canGoBack())router.back();
+  else router.replace('/(tabs)');
+ };
  const heading=<View style={{flexDirection:'row',alignItems:'center',minWidth:0,flex:tablet?0:1,width:tablet?220:undefined}}>
- {control('Geri dön',ArrowLeft,()=>{void controllerRef.current?.flush().finally(()=>router.back())})}
+ {control('Geri dön',ArrowLeft,()=>{void goBack()})}
  <Pressable accessibilityRole="button" accessibilityLabel="Defteri düzenle" onPress={()=>router.push({pathname:'/notebook-editor',params:{id}})} style={{flex:1,minWidth:0,justifyContent:'center',minHeight:44}}>
  <Text numberOfLines={1} style={{fontFamily:fonts.heading,fontSize:17,color:ink}}>{notebook?.title??'Defter'}</Text>
  <Text numberOfLines={1} style={{fontFamily:fonts.body,fontSize:12,color:controller?.error?colors.coral:muted}}>{`Sayfa ${pages.length?index+1:0} / ${pages.length} · ${status}`}</Text></Pressable></View>;
