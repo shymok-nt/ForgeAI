@@ -110,7 +110,7 @@ export default function NoteCanvasScreen(){
  {focus&&<Pressable accessibilityRole="button" accessibilityLabel="Araç çubuklarını göster" onPress={()=>setFocus(false)} style={{position:'absolute',top:0,left:0,right:0,height:44,alignItems:'center',justifyContent:'center'}}><Eye color={colors.accent} size={20}/></Pressable>}
  {!tablet&&!focus&&<View style={{position:'absolute',bottom:28,left:12,right:12}}><CanvasToolbar tablet={false} tool={tool} colors={colors} onTool={chooseTool} onPages={()=>setSheet(true)} onImage={()=>void insertImage()}/></View>}
 
- {selectedImageId&&<View style={{position:'absolute',top:12,alignSelf:'center',flexDirection:'row',gap:12,paddingHorizontal:12,paddingVertical:6,borderRadius:16,backgroundColor:colors.surfaceRaised,zIndex:30}}><Pressable accessibilityRole="button" accessibilityLabel="Resmi küçült" onPress={()=>editImage('shrink')} style={hit}><Minus color={ink} size={22}/></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Resmi büyüt" onPress={()=>editImage('grow')} style={hit}><Plus color={ink} size={22}/></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Resmi sil" onPress={()=>editImage('delete')} style={hit}><Trash2 color={colors.coral} size={22}/></Pressable></View>}
+ 
  {ruler&&<View pointerEvents="none" style={{position:'absolute',top:'45%',left:'15%',width:'70%',height:64,backgroundColor:colors.accent+'55',borderWidth:1,borderColor:colors.accent,borderRadius:6,justifyContent:'center',alignItems:'center'}}><Text style={{color:ink}}>0°   | | | | | | | | | | | |</Text></View>}
  {popover}
  </View>
