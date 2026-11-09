@@ -161,6 +161,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  // A retained handoff is the current visible baseline until another commit.
  const selectedBounds=handoffMatchesSelection?handoff!.bounds:(selectedFrame?.bounds??null);
  const selectedRotation=handoffMatchesSelection?handoff!.rotation:(selectedFrame?.rotation??0);
+ // Match the actual painted outline rather than an arbitrary 10-unit
+ // gap. Scaling the shared Group now keeps the frame flush with the stroke.
+ const selectionPadding=Math.max(0,...baselineElements.map(e=>e.type==='shape'?e.stroke.width/2:0));
+ const selectionPaddingValue=useSharedValue(0);
+ useEffect(()=>{selectionPaddingValue.value=selectionPadding;},[selectionPadding]);
  const selectedRotationValue=useSharedValue(0);
  useEffect(()=>{selectedRotationValue.value=selectedRotation;},[selectedRotation]);
  // As soon as persisted geometry arrives, the handoff draws that geometry
@@ -337,7 +342,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    const cornerRadius=22/(fitWidth*zoom.value);
    const rotation=selectedRotationValue.value,cos=Math.cos(rotation),sin=Math.sin(rotation);
    const corners:[[number,number],[number,number],[number,number],[number,number]]=[
-    [b[0]-10,b[1]-10],[b[2]+10,b[1]-10],[b[0]-10,b[3]+10],[b[2]+10,b[3]+10]
+    [b[0]-selectionPaddingValue.value,b[1]-selectionPaddingValue.value],[b[2]+selectionPaddingValue.value,b[1]-selectionPaddingValue.value],[b[0]-selectionPaddingValue.value,b[3]+selectionPaddingValue.value],[b[2]+selectionPaddingValue.value,b[3]+selectionPaddingValue.value]
    ].map(([x,y])=>[cx+(x-cx)*cos-(y-cy)*sin,cy+(x-cx)*sin+(y-cy)*cos]) as [[number,number],[number,number],[number,number],[number,number]];
    let cornerHit=false;
    for(const corner of corners){
@@ -519,7 +524,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   {(()=>{
    const bounds=handoffBounds??selectedBounds!;
    const rotation=handoffMatchesSelection?handoffRotation:selectedRotation;
-   const x=bounds[0]-10,y=bounds[1]-10,w=bounds[2]-bounds[0]+20,h=bounds[3]-bounds[1]+20;
+   const x=bounds[0]-selectionPadding,y=bounds[1]-selectionPadding,w=bounds[2]-bounds[0]+2*selectionPadding,h=bounds[3]-bounds[1]+2*selectionPadding;
    return <Group origin={vec((bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2)} transform={[{rotate:rotation}]}>
     <Rect x={x} y={y} width={w} height={h} color="#3388EE" style="stroke" strokeWidth={1.5}/>
     {[[x,y],[x+w,y],[x,y+h],[x+w,y+h]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
