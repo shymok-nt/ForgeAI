@@ -58,7 +58,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  if(next!==content.elements){onChange({v:2,elements:next});if(selectionAction.kind==='delete'){setSelectedIds([]);onSelectionChange?.([])}}
  },[selectionAction?.version]);
  const [size,setSize]=useState({width:300,height:450});
- const fitWidth=Math.max(0.01,(size.width-4)/PAGE_WIDTH);
+ const fitWidth=Math.max(0.01,size.width/PAGE_WIDTH);
  const fitAll=Math.max(0.01,Math.min(fitWidth,(size.height-4)/PAGE_HEIGHT));
  const minZoom=Math.max(0.1,fitAll/fitWidth*0.8);
  const zoom=useSharedValue(1),offsetX=useSharedValue(0),offsetY=useSharedValue(0);
@@ -130,7 +130,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  });
  const gestures=Gesture.Simultaneous(pan,pinch,doubleTap);
 
- return <View onLayout={layout} style={{flex:1,overflow:'hidden'}}>
+ return <View onLayout={layout} style={{flex:1,overflow:'hidden',backgroundColor:paperColor==='krem'?'#FFF5DF':'#FFFFFF'}}>
  <GestureDetector gesture={gestures}><View style={{flex:1}}><Canvas style={{flex:1}}>
  <Group transform={transform}>
  <StaticPaper template={template} paperColor={paperColor}/>
