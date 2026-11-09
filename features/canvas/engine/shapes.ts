@@ -1,7 +1,16 @@
 import {Skia,type SkPath} from '@shopify/react-native-skia';
 import type {Element,ShapeElement,ShapeKind,Bounds} from '@/features/canvas/types';
 export function shapeBounds(p:ShapeElement['params']):Bounds{
- const {x,y,w,h}=p;return [Math.min(x,x+w),Math.min(y,y+h),Math.max(x,x+w),Math.max(y,y+h)];
+ const {x,y,w,h,rotation}=p;
+ const left=Math.min(x,x+w),right=Math.max(x,x+w),top=Math.min(y,y+h),bottom=Math.max(y,y+h);
+ if(!rotation)return [left,top,right,bottom];
+ const cx=(left+right)/2,cy=(top+bottom)/2;
+ const cos=Math.cos(rotation),sin=Math.sin(rotation);
+ const corners=[[left,top],[right,top],[right,bottom],[left,bottom]].map(([px,py])=>[
+  cx+(px-cx)*cos-(py-cy)*sin,
+  cy+(px-cx)*sin+(py-cy)*cos
+ ]);
+ return [Math.min(...corners.map(p=>p[0])),Math.min(...corners.map(p=>p[1])),Math.max(...corners.map(p=>p[0])),Math.max(...corners.map(p=>p[1]))];
 }
 export function shapePath(s:ShapeElement):SkPath{
  const {x,y,w,h,points}=s.params;
@@ -40,7 +49,7 @@ export function scaleElement(e:Element,cx:number,cy:number,sx:number,sy:number):
 export function rotateElement(e:Element,cx:number,cy:number,angle:number):Element{
  const rotate=(x:number,y:number):[number,number]=>[cx+(x-cx)*Math.cos(angle)-(y-cy)*Math.sin(angle),cy+(x-cx)*Math.sin(angle)+(y-cy)*Math.cos(angle)];
  if(e.type==='stroke'){const points=[...e.points];for(let i=0;i<points.length;i+=3)[points[i],points[i+1]]=rotate(points[i],points[i+1]);const xs=points.filter((_,i)=>i%3===0),ys=points.filter((_,i)=>i%3===1);return {...e,points,bbox:[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]}}
- const p=e.params;const [x,y]=rotate(p.x,p.y);const params={...p,x,y,rotation:p.rotation+angle};return {...e,params,bbox:shapeBounds(params)};
+ const p=e.params;const params={...p,rotation:p.rotation+angle};return {...e,params,bbox:shapeBounds(params)};
 }
 export function pointInside(poly:number[],x:number,y:number){let inside=false;for(let i=0,j=poly.length-2;i<poly.length;j=i,i+=2){const xi=poly[i],yi=poly[i+1],xj=poly[j],yj=poly[j+1];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)inside=!inside}return inside}
 export function lassoSelect(elements:Element[],poly:number[]):string[]{
