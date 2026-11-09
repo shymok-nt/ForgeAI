@@ -6,6 +6,7 @@ import type {PageContent} from '@/features/canvas/types';
 export function useAutosave(pageId:string|null,content:PageContent){
  const [error,setError]=useState(false),[saving,setSaving]=useState(false);
  const latest=useRef({pageId,content});latest.current={pageId,content};
+ const initialized=useRef(false),dirty=useRef(false);
  const pending=useRef(new Map<string,string>()),chain=useRef(Promise.resolve()),timer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const flush=()=>{const {pageId:id,content:value}=latest.current;if(!id||!dirty.current)return chain.current;dirty.current=false;
   const json=serializeContent(value);pending.current.set(id,json);
