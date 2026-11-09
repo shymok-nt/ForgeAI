@@ -263,12 +263,16 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(!committed)return;
   pendingHandoff.current=false;
   if(handoffFrame.current!==null)cancelAnimationFrame(handoffFrame.current);
-  handoffFrame.current=requestAnimationFrame(()=>{
+  // Allow Skia's native/web drawing pipeline to finish its own commit
+  // before removing the final-geometry overlay. Two browser frames were
+  // insufficient on slower CanvasKit renders.
+  const settle=(remaining:number)=>{
    handoffFrame.current=requestAnimationFrame(()=>{
-    handoffFrame.current=null;
-    setHandoff(null);
+    if(remaining>1)settle(remaining-1);
+    else {handoffFrame.current=null;setHandoff(null);}
    });
-  });
+  };
+  settle(4);
  },[content,handoff]);
  useEffect(()=>()=>{if(handoffFrame.current!==null)cancelAnimationFrame(handoffFrame.current)},[]);
  const selectionStart=useSharedValue<Sample|null>(null);
