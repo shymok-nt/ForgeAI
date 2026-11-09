@@ -390,6 +390,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const imageFocalX=useSharedValue(0),imageFocalY=useSharedValue(0),imageFocalDX=useSharedValue(0),imageFocalDY=useSharedValue(0);
  const imageBounds=useSharedValue<[number,number,number,number]|null>(null);
  const imagePaintBounds=useSharedValue<[number,number,number,number]|null>(null);
+ const imageRotateHandle=useSharedValue(false),imageRotateStart=useSharedValue(0);
  const imageCorner=useSharedValue(false),imageCornerStart=useSharedValue(1),imageCornerX=useSharedValue(0),imageCornerY=useSharedValue(0);
  const imageCornerAnchorX=useSharedValue(0),imageCornerAnchorY=useSharedValue(0),imageCornerSignX=useSharedValue(1),imageCornerSignY=useSharedValue(1);
  const imageCommittedX=useSharedValue(0),imageCommittedY=useSharedValue(0),imageCommittedScale=useSharedValue(1),imageCommittedAngle=useSharedValue(0);
@@ -455,6 +456,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    const dy=(p[1]-cy-imageCommittedY.value-imageDY.value)/scale;
    const lx=cx+dx*cos+dy*sin,ly=cy-dx*sin+dy*cos;
    const radius=24/(fitWidth*zoom.value)/scale;
+   if(Platform.OS==='web'&&Math.hypot(lx-(cx),ly-(bounds[1]-48/scale))<radius){imageRotateHandle.value=true;imageRotateStart.value=Math.atan2(p[1]-cy-imageCommittedY.value,p[0]-cx-imageCommittedX.value);imageAngle.value=0;samples.value=[];drawing.value=false;draft.value='';return;}
    if(Platform.OS==='web'){
     const corners:[[number,number],[number,number],[number,number],[number,number]]=[[bounds[0],bounds[1]],[bounds[2],bounds[1]],[bounds[0],bounds[3]],[bounds[2],bounds[3]]];
     for(const [hx,hy] of corners){
@@ -487,6 +489,15 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    const corners:[[number,number],[number,number],[number,number],[number,number]]=[
     [b[0]-selectionPaddingValue.value,b[1]-selectionPaddingValue.value],[b[2]+selectionPaddingValue.value,b[1]-selectionPaddingValue.value],[b[0]-selectionPaddingValue.value,b[3]+selectionPaddingValue.value],[b[2]+selectionPaddingValue.value,b[3]+selectionPaddingValue.value]
    ].map(([x,y])=>[cx+(x-cx)*cos-(y-cy)*sin,cy+(x-cx)*sin+(y-cy)*cos]) as [[number,number],[number,number],[number,number],[number,number]];
+   // Dedicated mouse rotation handle above the selection, independent of resize.
+   const rotateX=cx+(0)*cos-(-48/(fitWidth*zoom.value)-(b[3]-b[1])/2)*sin;
+   const rotateY=cy+(0)*sin+(-48/(fitWidth*zoom.value)-(b[3]-b[1])/2)*cos;
+   if(Platform.OS==='web'&&Math.hypot(p[0]-rotateX,p[1]-rotateY)<=cornerRadius){
+    selectionPreviewLive.value=true;cornerActive.value=true;cornerMode.value=2;
+    cornerCenterX.value=cx;cornerCenterY.value=cy;cornerStartX.value=rotateX;cornerStartY.value=rotateY;
+    cornerStartPageX.value=p[0];cornerStartPageY.value=p[1];cornerStartRadius.value=Math.max(1,Math.hypot(rotateX-cx,rotateY-cy));
+    gestureScale.value=1;gestureAngle.value=0;samples.value=[];drawing.value=false;draft.value='';return;
+   }
    let cornerHit=false;
    for(const corner of corners){
     if(Math.hypot(p[0]-corner[0],p[1]-corner[1])<=cornerRadius){
@@ -528,6 +539,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
  }).onUpdate(e=>{
   if(blocked.value||e.numberOfPointers!==1)return;
+  if(imageRotateHandle.value){const p=pagePoint(e.x,e.y),b=imagePaintBounds.value;if(!b)return;const cx=(b[0]+b[2])/2+imageCommittedX.value,cy=(b[1]+b[3])/2+imageCommittedY.value;imageAngle.value=Math.atan2(p[1]-cy,p[0]-cx)-imageRotateStart.value;return;}
   if(imageCorner.value){
    const p=pagePoint(e.x,e.y),b=imagePaintBounds.value;if(!b)return;
    const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;
@@ -594,6 +606,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
   if(tool==='eraser'){cursorX.value=p[0];cursorY.value=p[1];cursorOn.value=true}
  }).onEnd(()=>{
+  if(imageRotateHandle.value){const angle=imageAngle.value;imageRotateHandle.value=false;imageCommittedAngle.value+=angle;imageAngle.value=0;if(Math.abs(angle)>0.0001)runOnJS(commitImagePinch)(0,0,1,angle);return;}
   if(imageCorner.value){const scale=imageScale.value;imageCorner.value=false;imageCommittedScale.value*=scale;imageScale.value=1;if(Math.abs(scale-1)>0.0001)runOnJS(commitImagePinch)(0,0,scale,0);return;}
   if(imageDragging.value){const dx=imageDX.value,dy=imageDY.value;imageDragging.value=false;imageDX.value=0;imageDY.value=0;if(!imagePinching.value&&Math.hypot(dx,dy)>0.1){imageCommittedX.value+=dx;imageCommittedY.value+=dy;runOnJS(commitImageMove)(dx,dy);}return;}
   if(cornerActive.value){
@@ -705,7 +718,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
      <Circle cx={item.x+item.width-40} cy={item.y+40} r={23} color="#FFFFFF"/>
      <Circle cx={item.x+item.width-40} cy={item.y+40} r={23} color="#E5484D" style="stroke" strokeWidth={2.5}/>
      <Path path={`M ${item.x+item.width-51} ${item.y+33} L ${item.x+item.width-29} ${item.y+33} M ${item.x+item.width-46} ${item.y+29} L ${item.x+item.width-34} ${item.y+29} M ${item.x+item.width-49} ${item.y+37} L ${item.x+item.width-47} ${item.y+52} Q ${item.x+item.width-40} ${item.y+55} ${item.x+item.width-33} ${item.y+52} L ${item.x+item.width-31} ${item.y+37} M ${item.x+item.width-43} ${item.y+40} L ${item.x+item.width-43} ${item.y+49} M ${item.x+item.width-37} ${item.y+40} L ${item.x+item.width-37} ${item.y+49}`} color="#E5484D" style="stroke" strokeWidth={2.7} strokeCap="round" strokeJoin="round"/>
-    </Group>{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={x} cy={y} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></Group>)}</>}</Group>;return item.id===displayImageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
+    </Group>{Platform.OS==='web'&&<><Line p1={vec(cx,item.y)} p2={vec(cx,item.y-48/Math.max(0.001,imageCommittedScale.value))} color="#3388EE" strokeWidth={imageOutlineWidth}/><Circle cx={cx} cy={item.y-48/Math.max(0.001,imageCommittedScale.value)} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={cx} cy={item.y-48/Math.max(0.001,imageCommittedScale.value)} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></>}{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={x} cy={y} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></Group>)}</>}</Group>;return item.id===displayImageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
@@ -719,6 +732,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    const x=bounds[0]-padding,y=bounds[1]-padding,w=bounds[2]-bounds[0]+2*padding,h=bounds[3]-bounds[1]+2*padding;
    return <Group origin={vec((bounds[0]+bounds[2])/2,(bounds[1]+bounds[3])/2)} transform={[{rotate:rotation}]}>
     <Rect x={x} y={y} width={w} height={h} color="#3388EE" style="stroke" strokeWidth={1.5}/>
+    {Platform.OS==='web'&&<><Line p1={vec(x+w/2,y)} p2={vec(x+w/2,y-48/(fitWidth*zoom.value))} color="#3388EE" strokeWidth={2}/><Circle cx={x+w/2} cy={y-48/(fitWidth*zoom.value)} r={10/(fitWidth*zoom.value)} color="#FFFFFF"/><Circle cx={x+w/2} cy={y-48/(fitWidth*zoom.value)} r={10/(fitWidth*zoom.value)} color="#3388EE" style="stroke" strokeWidth={2}/></>}
     {[[x,y],[x+w,y],[x,y+h],[x+w,y+h]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
    </Group>;
   })()}
