@@ -71,3 +71,11 @@ Gerekli Expo bağımlılıklarını yerel makinede `npx expo install react-nativ
 ## Çizim performansı testleri
 
 Expo Go geliştirme modundaki FPS gerçek cihaz performansını yansıtmayabilir. Android release derlemesinde test edin: `npx expo run:android --variant release` veya `eas build --profile preview`. Çok çizgili sayfalar, çoklu dokunma ve arka plana geçişten sonra kayıt ayrıca test edilmelidir.
+
+## Parça 2 — v2 vektör şekiller (geliştirme aşaması)
+
+v2 sayfa içeriği artık hem `stroke` hem `shape` elemanlarını kabul eder. Shape: `kind` (line, arrow, rect, ellipse, triangle, polygon), `params` (x/y/w/h/rotation ve isteğe bağlı points), `stroke`, `fill`, `bbox`. Eski v2 stroke kayıtları okunmaya devam eder. Seçim için lasso örnek noktalarının en az yarısının kapalı eğrinin içinde olması ölçütü kullanılır. Geometri işlemleri doğrudan eleman koordinatlarına uygulanır; undo geçmişi işlem öncesi sayfa görüntüsünü 100 adımla saklar.
+
+Dokunuş yönlendirmesi Gesture Handler/Reanimated üzerinden yürür. Kalem dokunuşu önce aday olarak bekletilir; iki parmak tespit edilirse aday iptal edilir. Kalıcı çizim işlemi tamamlanınca sayfa içeriği güncellenir. Kayıt stratejisi: 2,5 saniye trailing debounce, 15 saniye üst sınır, aynı sayfa için seri SQLite yazımı. Gerçek cihazda pinch, lasso, şekil ve kayıt testleri gerekir.
+
+**Eksik Parça 2 özellikleri:** canlı seçim matrisi, tutamaçlarla sürükleyerek döndürme/ölçekleme, tam pano kes/kopyala/yapıştır, cetvel sürükleme/çizgiye yapıştırma, otomatik şekil tanıma ve gerçek cihaz performans doğrulaması. Cetvel şu anda yalnızca görsel yer tutucudur.
