@@ -12,7 +12,8 @@ export function parseContent(raw:string):PageContent{
  return false;
  });
  const h=typeof obj.h==='number'&&Number.isFinite(obj.h)&&obj.h>=1414?Math.min(obj.h,1000000):undefined;
- return h===undefined?{v:2,elements}:{v:2,elements,h};
+ const images=Array.isArray(obj.images)?obj.images.filter((value):value is import('@/features/canvas/types').PageImage=>{if(!value||typeof value!=='object')return false;const i=value as Record<string,unknown>;return typeof i.id==='string'&&typeof i.uri==='string'&&i.uri.startsWith('data:image/')&&['x','y','width','height'].every(k=>typeof i[k]==='number'&&Number.isFinite(i[k]))&&Number(i.width)>0&&Number(i.height)>0}):[];
+ return h===undefined?{v:2,elements,images}:{v:2,elements,images,h};
  }catch{return emptyContent()}
 }
 export function serializeContent(content:PageContent){return JSON.stringify(content)}
