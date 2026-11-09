@@ -4,6 +4,7 @@ export type Point=[number,number,number];
 export type Bounds=[number,number,number,number];
 export type StrokeElement={id:string;type:'stroke';renderMode?:'centerline';z:number;createdAt:string;tool:'pen'|'highlighter';color:string;width:number;opacity:number;points:number[];bbox:Bounds};
 export type ShapeKind='line'|'arrow'|'rect'|'ellipse'|'triangle'|'polygon';
+export type ShapeMode=ShapeKind|'auto';
 export type ShapeElement={id:string;type:'shape';z:number;createdAt:string;kind:ShapeKind;params:{x:number;y:number;w:number;h:number;rotation:number;points?:number[]};stroke:{color:string;width:number;opacity:number};fill:null|{color:string;opacity:number};bbox:Bounds};
 export type Element=StrokeElement|ShapeElement;
 export type PageContent={v:2;elements:Element[];h?:number};
