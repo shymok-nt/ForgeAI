@@ -237,7 +237,6 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const finalElements=next.filter(e=>ids.has(e.id));
   const finalFrame=selectionFrame(finalElements);
   if(!finalFrame)return;
-  if(handoffFrame.current!==null){cancelAnimationFrame(handoffFrame.current);handoffFrame.current=null;}
   pendingHandoff.current=true;
   setHandoff({elements:finalElements,bounds:finalFrame.bounds,rotation:finalFrame.rotation,dx:0,dy:0,scale:1,angle:0});
   onChange(withHeight(next));
