@@ -155,8 +155,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   handoff.elements.every(e=>selectedIds.includes(e.id));
 
  const selectedFrame=useMemo(()=>selectionFrame(selectedElements),[selectedElements]);
- const selectedBounds=selectedFrame?.bounds??null;
- const selectedRotation=selectedFrame?.rotation??0;
+ // Use the same geometry for gesture hit-testing, transform center and rendering.
+ // A retained handoff is the current visible baseline until another commit.
+ const selectedBounds=handoffMatchesSelection?handoff!.bounds:(selectedFrame?.bounds??null);
+ const selectedRotation=handoffMatchesSelection?handoff!.rotation:(selectedFrame?.rotation??0);
  const selectedRotationValue=useSharedValue(0);
  useEffect(()=>{selectedRotationValue.value=selectedRotation;},[selectedRotation]);
  // As soon as persisted geometry arrives, the handoff draws that geometry
@@ -184,7 +186,9 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const selectionBoundsValue=useSharedValue<readonly [number,number,number,number]|null>(null);
  useEffect(()=>{selectionBoundsValue.value=selectedBounds;},[selectedBounds]);
  const dragTransform=useDerivedValue(()=>[{translateX:dragX.value},{translateY:dragY.value}]);
- const selectionTransform=useDerivedValue(()=>!selectionGestureLive.value&&handoffMatchesSelection?[]:[
+ // Keep the worklet independent of React's handoff closure. Otherwise the
+ // first gesture updates, but subsequent gestures can reuse a stale worklet.
+ const selectionTransform=useDerivedValue(()=>!selectionGestureLive.value?[]:[
   {translateX:dragX.value+gestureDX.value},
   {translateY:dragY.value+gestureDY.value},
   {translateX:gestureCenterX.value},
@@ -197,7 +201,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const selectAt=(x:number,y:number)=>{
   const margin=16/fitWidth;
   const hit=[...content.elements].reverse().find(e=>x>=e.bbox[0]-margin&&x<=e.bbox[2]+margin&&y>=e.bbox[1]-margin&&y<=e.bbox[3]+margin);
-  if(hit){setSelectedIds([hit.id]);onSelectionChange?.([hit.id]);}
+  if(hit){if(!selectedRef.current.includes(hit.id))setHandoff(null);setSelectedIds([hit.id]);onSelectionChange?.([hit.id]);}
  };
  const commitSelectionMove=(dx:number,dy:number)=>{
   if(Math.hypot(dx,dy)<0.1)return;
