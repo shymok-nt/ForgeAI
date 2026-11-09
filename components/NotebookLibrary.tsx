@@ -39,7 +39,7 @@ export function NotebookLibrary({favorites=false}:{favorites?:boolean}){const {c
  <Pressable accessibilityRole="button" accessibilityLabel="Defteri çoğalt" style={styles.option} onPress={()=>{if(selected)duplicate(selected.id);setSelected(null);setChecked([])}}><Text style={styles.optionText}>Çoğalt</Text></Pressable>
  <Pressable accessibilityRole="button" accessibilityLabel="Defteri sil" style={styles.option} onPress={()=>{if(selected)deleteSelected(selected)}}><Text style={[styles.optionText,{color:colors.coral}]}>Sil</Text></Pressable>
  <Pressable accessibilityRole="button" accessibilityLabel="Kapat" style={styles.option} onPress={()=>setSelected(null)}><Text style={styles.optionText}>Vazgeç</Text></Pressable>
- </View></Pressable></Modal>
+ </View></View></Modal>
  <Modal visible={!!moveTarget} transparent animationType="slide" onRequestClose={()=>setMoveTarget(null)}><View style={styles.overlay}><View style={styles.sheet}><Text style={styles.sheetTitle}>Klasöre taşı</Text>{[{id:null,name:'Klasörsüz'},...folders].map(f=><Pressable key={f.id??'none'} accessibilityRole="button" accessibilityLabel={f.name+' klasörüne taşı'} style={styles.option} onPress={()=>{if(moveTarget)void moveNotebook(moveTarget.id,f.id);setMoveTarget(null)}}><Text style={styles.optionText}>{f.name}</Text></Pressable>)}<Pressable accessibilityRole="button" accessibilityLabel="Vazgeç" style={styles.option} onPress={()=>setMoveTarget(null)}><Text style={styles.optionText}>Vazgeç</Text></Pressable></View></View></Modal>
  </SafeAreaView>
 }
