@@ -130,6 +130,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const gestureDX=useSharedValue(0),gestureDY=useSharedValue(0);
  const transformActive=useSharedValue(false),transformPending=useSharedValue(false);
  const selectionHandoffOpacity=useSharedValue(1);
+ const handoffFrame=useRef<number|null>(null);
  const rotateActive=useSharedValue(false),pinchActive=useSharedValue(false);
  const gestureFocalX=useSharedValue(0),gestureFocalY=useSharedValue(0);
  const gestureCenterX=useSharedValue(0),gestureCenterY=useSharedValue(0);
@@ -190,20 +191,25 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    return out;
   });
   transformPending.value=true;
-  selectionHandoffOpacity.value=0;
   onChange(withHeight(next));
  };
  useLayoutEffect(()=>{
   if(transformPending.value){
    gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
    transformPending.value=false;
-   // New geometry and the identity transform must reach Skia before it is visible.
-   requestAnimationFrame(()=>{selectionHandoffOpacity.value=1});
+   // Skia commits React paths and Reanimated transforms on different frames.
+   // Keep the old preview hidden until both the new path and reset transform
+   // have passed through the renderer; one RAF was too early on web.
+   if(handoffFrame.current!==null)cancelAnimationFrame(handoffFrame.current);
+   handoffFrame.current=requestAnimationFrame(()=>{
+    handoffFrame.current=requestAnimationFrame(()=>{
+     handoffFrame.current=null;
+     selectionHandoffOpacity.value=1;
+    });
+   });
   }
  },[content]);
- // Keep the rendered preview in place until React has committed the new geometry.
- // Resetting the gesture values before the new frame was painted caused a
- // one-frame jump between the preview and the persisted shape.
+ useEffect(()=>()=>{if(handoffFrame.current!==null)cancelAnimationFrame(handoffFrame.current)},[]);
  const selectionStart=useSharedValue<Sample|null>(null);
  const downTime=useSharedValue(0),startX=useSharedValue(0),startY=useSharedValue(0);
  const originX=useDerivedValue(()=>(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value);
@@ -365,6 +371,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    cornerActive.value=false;cornerMode.value=0;
    if(!blocked.value&&(Math.abs(scale-1)>0.0001||Math.abs(angle)>0.0001)){
     transformPending.value=true;
+    selectionHandoffOpacity.value=0;
     runOnJS(commitGesture)(0,0,scale,angle);
    }else {gestureScale.value=1;gestureAngle.value=0;}
    runOnJS(notify)(false);return;
@@ -407,8 +414,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    if(!rotateActive.value){
     const dx=gestureDX.value,dy=gestureDY.value,scale=gestureScale.value,angle=gestureAngle.value;
     transformActive.value=false;
-    if(Math.abs(dx)+Math.abs(dy)+Math.abs(scale-1)+Math.abs(angle)>0.0001)
+    if(Math.abs(dx)+Math.abs(dy)+Math.abs(scale-1)+Math.abs(angle)>0.0001){
+     selectionHandoffOpacity.value=0;
      runOnJS(commitGesture)(dx,dy,scale,angle);
+    }
     else {gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;}
     runOnJS(notify)(false);
    }
