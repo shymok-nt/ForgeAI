@@ -436,14 +436,14 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    if(!blocked.value&&(Math.abs(scale-1)>0.0001||Math.abs(angle)>0.0001)){
     transformPending.value=true;
     runOnJS(commitGesture)(0,0,scale,angle);
-   }else {gestureScale.value=1;gestureAngle.value=0;}
+   }else {gestureScale.value=1;gestureAngle.value=0;selectionGestureLive.value=false;}
    runOnJS(notify)(false);return;
   }
   if(draggingSelection.value){
    const dx=dragX.value,dy=dragY.value;
    draggingSelection.value=false;
    if(!blocked.value&&Math.hypot(dx,dy)>0.1){runOnJS(commitSelectionMove)(dx,dy);}
-   else {dragX.value=0;dragY.value=0;}
+   else {dragX.value=0;dragY.value=0;selectionGestureLive.value=false;}
    drawing.value=false;
    runOnJS(notify)(false);return;
   }
@@ -480,7 +480,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
     if(Math.abs(dx)+Math.abs(dy)+Math.abs(scale-1)+Math.abs(angle)>0.0001){
      runOnJS(commitGesture)(dx,dy,scale,angle);
     }
-    else {gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;}
+    else {gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;selectionGestureLive.value=false;}
     runOnJS(notify)(false);
    }
    return;
