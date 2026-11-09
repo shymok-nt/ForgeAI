@@ -406,11 +406,16 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  // UI-thread transform in separate frames caused the visible release jitter.
  // Only reset the preview when a DIFFERENT image is selected/deselected.
  const paintedImageIdRef=useRef<string|null>(null);
+ const [displayImageId,setDisplayImageId]=useState<string|null>(null);
  useLayoutEffect(()=>{
   const current=(content.images??[]).find(x=>x.id===imageId);
   imageBounds.value=current?[current.x,current.y,current.x+current.width,current.y+current.height]:null;
+  // Deselecting must only remove the handles. Switching from the frozen
+  // Skia baseline to persisted geometry on that tap caused a visible jump.
+  if(imageId===null)return;
   if(paintedImageIdRef.current===imageId)return;
   paintedImageIdRef.current=imageId;
+  setDisplayImageId(imageId);
   imageHandoff.current=false;
   imageCommittedX.value=0;imageCommittedY.value=0;
   imageCommittedScale.value=1;imageCommittedAngle.value=0;
@@ -667,7 +672,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <GestureDetector gesture={gestures}><View style={{flex:1,touchAction:'none'}}><Canvas style={{flex:1}}>
  <Group transform={transform}>
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
- {(content.images??[]).map(source=>{const item=source.id===imageId&&paintedImage?paintedImage:source;const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={3}/>{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={9} color="#FFFFFF"/><Circle cx={x} cy={y} r={9} color="#3388EE" style="stroke" strokeWidth={3}/></Group>)}</>}</Group>;return item.id===imageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
+ {(content.images??[]).map(source=>{const item=source.id===displayImageId&&paintedImage?paintedImage:source;const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={3}/>{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={9} color="#FFFFFF"/><Circle cx={x} cy={y} r={9} color="#3388EE" style="stroke" strokeWidth={3}/></Group>)}</>}</Group>;return item.id===displayImageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
