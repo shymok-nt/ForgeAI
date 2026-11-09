@@ -35,9 +35,9 @@
     "expo-file-system": "~58.0.11",
     "expo-linear-gradient": "~58.0.3",
     "expo-crypto": "~58.0.7",
-    "react-native-gesture-handler": "~2.30.0",
-    "react-native-reanimated": "~4.1.1",
-    "react-native-worklets": "0.7.1",
+    "react-native-gesture-handler": "~3.3.0",
+    "react-native-reanimated": "4.7.1",
+    "react-native-worklets": "0.13.0",
     "perfect-freehand": "^1.2.2",
     "expo-haptics": "~58.0.8",
     "expo-keep-awake": "~58.0.8"
