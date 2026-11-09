@@ -14,7 +14,7 @@ import type {PageTemplate,PaperColor} from '@/types/notebook';
 export type Tool='pen'|'highlighter'|'eraser'|'hand'|'select'|'shape';
 export type Brush={color:string;width:number;opacity:number};
 type Sample=[number,number,number];
-type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}};
+type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number};transformMode?:boolean};
 const PAPER_STEP=80;
 const previewShape=(kind:string,x0:number,y0:number,x1:number,y1:number):string=>{ 'worklet';
  const l=Math.min(x0,x1),r=Math.max(x0,x1),t=Math.min(y0,y1),b=Math.max(y0,y1);
@@ -77,7 +77,7 @@ const StrokeLayer=memo(function StrokeLayer({element}:{element:Element}){
 const Completed=memo(function Completed({content,hiddenIds}:{content:PageContent;hiddenIds?:string[]}){
  return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)).map(element=><StrokeLayer key={element.id} element={element}/>)}</>;
 });
-export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction}:Props){
+export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false}:Props){
  const [selectedIds,setSelectedIds]=useState<string[]>([]);
  const selectedRef=useRef<string[]>([]);selectedRef.current=selectedIds;
  useEffect(()=>{if(!selectionAction)return;const ids=new Set(selectedRef.current);if(!ids.size)return;let next:Element[]=content.elements;
@@ -105,6 +105,12 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const samples=useSharedValue<Sample[]>([]),blocked=useSharedValue(false),drawing=useSharedValue(false);
  const dragX=useSharedValue(0),dragY=useSharedValue(0),draggingSelection=useSharedValue(false);
  const dragPending=useSharedValue(false);
+ const gestureScale=useSharedValue(1),gestureAngle=useSharedValue(0);
+ const gestureDX=useSharedValue(0),gestureDY=useSharedValue(0);
+ const transformActive=useSharedValue(false),transformPending=useSharedValue(false);
+ const rotateActive=useSharedValue(false),pinchActive=useSharedValue(false);
+ const gestureFocalX=useSharedValue(0),gestureFocalY=useSharedValue(0);
+ const gestureCenterX=useSharedValue(0),gestureCenterY=useSharedValue(0);
 
  const selectedElements=useMemo(()=>content.elements.filter(e=>selectedIds.includes(e.id)),[content,selectedIds]);
  const selectedBounds=useMemo(()=>{
@@ -114,6 +120,16 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const selectionBoundsValue=useSharedValue<readonly [number,number,number,number]|null>(null);
  useEffect(()=>{selectionBoundsValue.value=selectedBounds;},[selectedBounds]);
  const dragTransform=useDerivedValue(()=>[{translateX:dragX.value},{translateY:dragY.value}]);
+ const selectionTransform=useDerivedValue(()=>[
+  {translateX:dragX.value+gestureDX.value},
+  {translateY:dragY.value+gestureDY.value},
+  {translateX:gestureCenterX.value},
+  {translateY:gestureCenterY.value},
+  {rotate:gestureAngle.value},
+  {scale:gestureScale.value},
+  {translateX:-gestureCenterX.value},
+  {translateY:-gestureCenterY.value}
+ ]);
  const selectAt=(x:number,y:number)=>{
   const margin=16/fitWidth;
   const hit=[...content.elements].reverse().find(e=>x>=e.bbox[0]-margin&&x<=e.bbox[2]+margin&&y>=e.bbox[1]-margin&&y<=e.bbox[3]+margin);
@@ -127,6 +143,39 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   onChange(withHeight(content.elements.map(e=>ids.has(e.id)?moveElement(e,dx,dy):e)));
  };
  useEffect(()=>{if(dragPending.value){dragX.value=0;dragY.value=0;dragPending.value=false}},[content]);
+ const commitGesture=(dx:number,dy:number,scale:number,angle:number)=>{
+  const ids=new Set(selectedRef.current);
+  if(!ids.size)return;
+  const b=selectedBounds;
+  if(!b)return;
+  const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;
+  const cos=Math.cos(angle),sin=Math.sin(angle);
+  const next=content.elements.map(e=>{
+   if(!ids.has(e.id))return e;
+   let out=e;
+   if(Math.abs(scale-1)>0.0001)out=scaleElement(out,cx,cy,scale,scale);
+   if(Math.abs(angle)>0.0001){
+    out=rotateElement(out,cx,cy,angle);
+    if(out.type==='shape'){
+     const p=out.params;
+     const sx=p.x+p.w/2,sy=p.y+p.h/2;
+     const rx=cx+(sx-cx)*cos-(sy-cy)*sin;
+     const ry=cy+(sx-cx)*sin+(sy-cy)*cos;
+     out=moveElement(out,rx-sx,ry-sy);
+    }
+   }
+   if(Math.abs(dx)+Math.abs(dy)>0.0001)out=moveElement(out,dx,dy);
+   return out;
+  });
+  transformPending.value=true;
+  onChange(withHeight(next));
+ };
+ useEffect(()=>{
+  if(transformPending.value){
+   gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
+   transformPending.value=false;
+  }
+ },[content]);
  const selectionStart=useSharedValue<Sample|null>(null);
  const downTime=useSharedValue(0),startX=useSharedValue(0),startY=useSharedValue(0);
  const originX=useDerivedValue(()=>(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value);
@@ -253,16 +302,63 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   dragX.value=0;dragY.value=0;
   drawing.value=true;runOnJS(notify)(true);
  }).runOnJS(false);
- const pinch=Gesture.Pinch().onBegin(()=>{blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value;pinchX.value=0;pinchY.value=0}).onUpdate(e=>{
+ const pinch=Gesture.Pinch().onBegin(e=>{
+  if(tool==='select'&&transformMode&&selectedBounds){
+   blocked.value=true;samples.value=[];draft.value='';drawing.value=false;
+   transformActive.value=true;pinchActive.value=true;
+   gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
+   gestureFocalX.value=e.focalX;gestureFocalY.value=e.focalY;
+   gestureCenterX.value=(selectedBounds[0]+selectedBounds[2])/2;
+   gestureCenterY.value=(selectedBounds[1]+selectedBounds[3])/2;
+   runOnJS(notify)(true);return;
+  }
+  blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value;pinchX.value=0;pinchY.value=0}).onUpdate(e=>{
+  if(tool==='select'&&transformMode&&selectedBounds){
+   gestureScale.value=Math.max(0.15,Math.min(8,e.scale));
+   gestureDX.value=(e.focalX-gestureFocalX.value)/(fitWidth*zoom.value);
+   gestureDY.value=(e.focalY-gestureFocalY.value)/(fitWidth*zoom.value);
+   return;
+  }
   const z=Math.max(minZoom,Math.min(5,baseZoom.value*e.scale));
   if(pinchX.value===0&&pinchY.value===0){pinchX.value=e.focalX;pinchY.value=e.focalY}
   const [x,y]=clamp(z,baseX.value+e.focalX-pinchX.value,baseY.value+e.focalY-pinchY.value);zoom.value=z;offsetX.value=x;offsetY.value=y;
- }).onEnd(()=>{blocked.value=true}).runOnJS(false);
+ }).onEnd(()=>{
+  if(tool==='select'&&transformMode&&transformActive.value){
+   pinchActive.value=false;
+   if(!rotateActive.value){
+    const dx=gestureDX.value,dy=gestureDY.value,scale=gestureScale.value,angle=gestureAngle.value;
+    transformActive.value=false;
+    if(Math.abs(dx)+Math.abs(dy)+Math.abs(scale-1)+Math.abs(angle)>0.0001)
+     runOnJS(commitGesture)(dx,dy,scale,angle);
+    else {gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;}
+    runOnJS(notify)(false);
+   }
+   return;
+  }
+  blocked.value=true;
+ }).runOnJS(false);
+ const rotation=Gesture.Rotation().onBegin(()=>{
+  if(tool==='select'&&transformMode&&selectedBounds){rotateActive.value=true;}
+ }).onUpdate(e=>{
+  if(tool==='select'&&transformMode&&transformActive.value)gestureAngle.value=e.rotation;
+ }).onEnd(()=>{
+  if(tool==='select'&&transformMode&&transformActive.value){
+   rotateActive.value=false;
+   if(!pinchActive.value){
+    const dx=gestureDX.value,dy=gestureDY.value,scale=gestureScale.value,angle=gestureAngle.value;
+    transformActive.value=false;
+    if(Math.abs(dx)+Math.abs(dy)+Math.abs(scale-1)+Math.abs(angle)>0.0001)
+     runOnJS(commitGesture)(dx,dy,scale,angle);
+    else {gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;}
+    runOnJS(notify)(false);
+   }
+  }
+ }).runOnJS(false);
  const doubleTap=Gesture.Tap().numberOfTaps(2).onEnd(()=>{
   const z=zoom.value<1.5?2.5:1;
   zoom.value=z;offsetX.value=0;offsetY.value=0;
  });
- const gestures=Gesture.Simultaneous(pan,hold,pinch,doubleTap);
+ const gestures=Gesture.Simultaneous(pan,hold,pinch,rotation,doubleTap);
 
  return <View onLayout={layout} style={{flex:1,overflow:'hidden',backgroundColor:paperColor==='krem'?'#FFF5DF':'#FFFFFF'}}>
  <GestureDetector gesture={gestures}><View style={{flex:1}}><Canvas style={{flex:1}}>
@@ -270,10 +366,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
-  {tool==='select'&&selectedElements.length>0&&<Group transform={dragTransform}>{selectedElements.map(element=><StrokeLayer key={element.id} element={element}/>)}</Group>}
+  {tool==='select'&&selectedElements.length>0&&<Group transform={selectionTransform}>{selectedElements.map(element=><StrokeLayer key={element.id} element={element}/>)}</Group>}
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
- {tool==='select'&&selectedBounds&&<Group transform={dragTransform}><Rect x={selectedBounds[0]} y={selectedBounds[1]} width={selectedBounds[2]-selectedBounds[0]} height={selectedBounds[3]-selectedBounds[1]} color="#3388EE" style="stroke" strokeWidth={2}/>{[[selectedBounds[0],selectedBounds[1]],[selectedBounds[2],selectedBounds[1]],[selectedBounds[0],selectedBounds[3]],[selectedBounds[2],selectedBounds[3]]].map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={7} color="#FFFFFF"/>)}</Group>}
+ {tool==='select'&&selectedBounds&&<Group transform={selectionTransform}><Rect x={selectedBounds[0]} y={selectedBounds[1]} width={selectedBounds[2]-selectedBounds[0]} height={selectedBounds[3]-selectedBounds[1]} color="#3388EE" style="stroke" strokeWidth={2}/>{[[selectedBounds[0],selectedBounds[1]],[selectedBounds[2],selectedBounds[1]],[selectedBounds[0],selectedBounds[3]],[selectedBounds[2],selectedBounds[3]]].map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={7} color="#FFFFFF"/>)}</Group>}
 
  {tool!=='eraser'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
  {tool==='eraser'&&<Circle cx={cursorX} cy={cursorY} r={eraserRadius} color="#808080" opacity={cursorOpacity} style="stroke" strokeWidth={1.5}/>}
