@@ -155,6 +155,15 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const selectedRotation=selectedFrame?.rotation??0;
  const selectedRotationValue=useSharedValue(0);
  useEffect(()=>{selectedRotationValue.value=selectedRotation;},[selectedRotation]);
+ // As soon as persisted geometry arrives, the handoff draws that geometry
+ // instead of re-projecting the old path. This prevents stale-size flashes.
+ const handoffCommitted=!!handoff&&handoff.elements.every(old=>{
+  const current=content.elements.find(e=>e.id===old.id);
+  return !!current&&current!==old;
+ });
+ const handoffElements=handoffCommitted?selectedElements:handoff?.elements??[];
+ const handoffBounds=handoffCommitted&&selectedBounds?selectedBounds:handoff?.bounds??null;
+ const handoffRotation=handoffCommitted?selectedRotation:handoff?.rotation??0;
  const selectionBoundsValue=useSharedValue<readonly [number,number,number,number]|null>(null);
  useEffect(()=>{selectionBoundsValue.value=selectedBounds;},[selectedBounds]);
  const dragTransform=useDerivedValue(()=>[{translateX:dragX.value},{translateY:dragY.value}]);
@@ -499,7 +508,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    {[[selectedBounds[0]-10,selectedBounds[1]-10],[selectedBounds[2]+10,selectedBounds[1]-10],[selectedBounds[0]-10,selectedBounds[3]+10],[selectedBounds[2]+10,selectedBounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
   </Group>
  </Group>}
- {tool==='select'&&handoff&&<Group transform={[
+ {tool==='select'&&handoff&&handoffBounds&&<Group transform={handoffCommitted?[]:[
   {translateX:handoff.dx},{translateY:handoff.dy},
   {translateX:(handoff.bounds[0]+handoff.bounds[2])/2},
   {translateY:(handoff.bounds[1]+handoff.bounds[3])/2},
@@ -507,10 +516,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   {translateX:-(handoff.bounds[0]+handoff.bounds[2])/2},
   {translateY:-(handoff.bounds[1]+handoff.bounds[3])/2}
  ]}>
-  {handoff.elements.map(element=><StrokeLayer key={element.id} element={element}/>)}
-  <Group origin={vec((handoff.bounds[0]+handoff.bounds[2])/2,(handoff.bounds[1]+handoff.bounds[3])/2)} transform={[{rotate:handoff.rotation}]}>
-   <Rect x={handoff.bounds[0]-10} y={handoff.bounds[1]-10} width={handoff.bounds[2]-handoff.bounds[0]+20} height={handoff.bounds[3]-handoff.bounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
-   {[[handoff.bounds[0]-10,handoff.bounds[1]-10],[handoff.bounds[2]+10,handoff.bounds[1]-10],[handoff.bounds[0]-10,handoff.bounds[3]+10],[handoff.bounds[2]+10,handoff.bounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
+  {handoffElements.map(element=><StrokeLayer key={element.id} element={element}/>)}
+  <Group origin={vec((handoffBounds[0]+handoffBounds[2])/2,(handoffBounds[1]+handoffBounds[3])/2)} transform={[{rotate:handoffRotation}]}>
+   <Rect x={handoffBounds[0]-10} y={handoffBounds[1]-10} width={handoffBounds[2]-handoffBounds[0]+20} height={handoffBounds[3]-handoffBounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
+   {[[handoffBounds[0]-10,handoffBounds[1]-10],[handoffBounds[2]+10,handoffBounds[1]-10],[handoffBounds[0]-10,handoffBounds[3]+10],[handoffBounds[2]+10,handoffBounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
   </Group>
  </Group>}
  {tool!=='eraser'&&tool!=='select'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
