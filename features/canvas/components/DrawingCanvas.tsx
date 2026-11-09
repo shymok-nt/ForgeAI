@@ -2,7 +2,7 @@ import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState
 import {View,PixelRatio,type LayoutChangeEvent} from 'react-native';
 import {Canvas,Group,Path,Rect,Line,Circle,vec} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector} from 'react-native-gesture-handler';
-import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
+import {useDerivedValue,useSharedValue,runOnJS,type SharedValue} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement} from '@/features/canvas/types';
 import {makeStroke,strokePath} from '@/features/canvas/engine/geometry';
@@ -77,7 +77,7 @@ const StaticPaper=memo(function StaticPaper({template,paperColor,pageHeight,fitW
   {dots.map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={lineW*1.2} color="#C4CCDD"/>)}
  </>;
 });
-const StrokeLayer=memo(function StrokeLayer({element,previewScale}:{element:Element;previewScale?:ReturnType<typeof useDerivedValue<number>>}){
+const StrokeLayer=memo(function StrokeLayer({element,previewScale}:{element:Element;previewScale?:SharedValue<number>}){
  const path=useMemo(()=>cachedPath(element),[element]);
  const stableStrokeWidth=useDerivedValue(()=>element.type==='shape'?element.stroke.width/Math.max(0.15,previewScale?.value??1):1);
  if(element.type==='shape'){
