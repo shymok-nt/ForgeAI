@@ -246,7 +246,17 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(blocked.value||e.numberOfPointers!==1)return;
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
   if(tool==='hand'){baseX.value=offsetX.value;baseY.value=offsetY.value;return}
-  // Selection is activated by tapping an element or drawing a lasso.
+  // Drag an already selected element immediately; don't wait for a long press.
+  // The previous zero-distance Pan gesture prevented LongPress from reliably activating.
+  if(tool==='select'&&selectionBoundsValue.value){
+   const p=pagePoint(e.x,e.y),b=selectionBoundsValue.value;
+   const hitSlop=18/(fitWidth*zoom.value);
+   if(p[0]>=b[0]-hitSlop&&p[0]<=b[2]+hitSlop&&p[1]>=b[1]-hitSlop&&p[1]<=b[3]+hitSlop){
+    draggingSelection.value=true;dragX.value=0;dragY.value=0;
+    samples.value=[];drawing.value=false;draft.value='';
+    return;
+   }
+  }
   samples.value=[pagePoint(e.x,e.y)];drawing.value=false;draft.value='';
   if(tool==='eraser'){
     const q=samples.value[0];
@@ -281,23 +291,14 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(draggingSelection.value){
    const dx=dragX.value,dy=dragY.value;
    draggingSelection.value=false;
-   if(!blocked.value&&Math.hypot(dx,dy)>0.1)runOnJS(commitSelectionMove)(dx,dy);
-   if(!dragPending.value){dragX.value=0;dragY.value=0;}
+   if(!blocked.value&&Math.hypot(dx,dy)>0.1){dragPending.value=true;runOnJS(commitSelectionMove)(dx,dy);}
+   else {dragX.value=0;dragY.value=0;}
    drawing.value=false;
    runOnJS(notify)(false);return;
   }
   if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;cursorOn.value=false;runOnJS(notify)(false);
- }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false}).runOnJS(false);
- const hold=Gesture.LongPress().minDuration(320).maxDistance(14).onStart(e=>{
-  if(tool!=='select'||blocked.value||!selectionBoundsValue.value)return;
-  const p=pagePoint(e.x,e.y);
-  // Select the topmost shape at the touch position before allowing a drag.
-  runOnJS(selectAt)(p[0],p[1]);
-  draggingSelection.value=true;
-  dragX.value=0;dragY.value=0;
-  drawing.value=true;runOnJS(notify)(true);
- }).runOnJS(false);
+ }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false;if(!dragPending.value){dragX.value=0;dragY.value=0;}}).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(e=>{
   if(tool==='select'&&selectionBoundsValue.value){
    blocked.value=true;samples.value=[];draft.value='';drawing.value=false;
@@ -354,7 +355,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const singleTap=Gesture.Tap().numberOfTaps(1).maxDuration(250).maxDistance(12).onEnd(e=>{
   if(tool==='select'&&!blocked.value){const p=pagePoint(e.x,e.y);runOnJS(selectAt)(p[0],p[1]);}
  }).runOnJS(false);
- const gestures=Gesture.Simultaneous(pan,hold,pinch,rotation,singleTap);
+ const gestures=Gesture.Simultaneous(pan,pinch,rotation,singleTap);
 
  return <View onLayout={layout} style={{flex:1,overflow:'hidden',touchAction:'none',backgroundColor:paperColor==='krem'?'#FFF5DF':'#FFFFFF'}}>
  <GestureDetector gesture={gestures}><View style={{flex:1,touchAction:'none'}}><Canvas style={{flex:1}}>
@@ -365,7 +366,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   {tool==='select'&&selectedElements.length>0&&<Group transform={selectionTransform}>{selectedElements.map(element=><StrokeLayer key={element.id} element={element}/>)}</Group>}
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
- {tool==='select'&&selectedBounds&&<Group transform={selectionTransform}><Rect x={selectedBounds[0]} y={selectedBounds[1]} width={selectedBounds[2]-selectedBounds[0]} height={selectedBounds[3]-selectedBounds[1]} color="#3388EE" style="stroke" strokeWidth={2}/>{[[selectedBounds[0],selectedBounds[1]],[selectedBounds[2],selectedBounds[1]],[selectedBounds[0],selectedBounds[3]],[selectedBounds[2],selectedBounds[3]]].map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={7} color="#FFFFFF"/>)}</Group>}
+ {tool==='select'&&selectedBounds&&<Group transform={selectionTransform}>
+  <Rect x={selectedBounds[0]-10} y={selectedBounds[1]-10} width={selectedBounds[2]-selectedBounds[0]+20} height={selectedBounds[3]-selectedBounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
+  {[[selectedBounds[0]-10,selectedBounds[1]-10],[selectedBounds[2]+10,selectedBounds[1]-10],[selectedBounds[0]-10,selectedBounds[3]+10],[selectedBounds[2]+10,selectedBounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
+ </Group>}
 
  {tool!=='eraser'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
  {tool==='eraser'&&<Circle cx={cursorX} cy={cursorY} r={eraserRadius} color="#808080" opacity={cursorOpacity} style="stroke" strokeWidth={1.5}/>}
