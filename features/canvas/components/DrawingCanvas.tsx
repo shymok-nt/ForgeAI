@@ -118,9 +118,15 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   setSelectedIds(ids);onSelectionChange?.(ids);return;
  }
  if(tool==='shape'){
+  if(__DEV__){
+   const step=Math.max(1,Math.floor(points.length/150));
+   const pts=points.filter((_,i)=>i%step===0).map(p=>[Math.round(p[0]),Math.round(p[1])]);
+   console.log('SHAPE_DEBUG',JSON.stringify({mode:shapeKind,count:points.length,pts}));
+  }
   const first=points[0],last=points[points.length-1];
   if(shapeKind==='auto'){
    const r=recognizeShape(points);
+   if(__DEV__)console.log('SHAPE_RESULT',JSON.stringify(r?{kind:r.kind,x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.w),h:Math.round(r.h)}:null));
    if(r){
     const s=makeShape(r.kind,r.x,r.y,r.w,r.h,brush.color,brush.width,brush.opacity,shapeFill);
     if(r.kind==='polygon'&&r.points)s.params={...s.params,points:r.points};
