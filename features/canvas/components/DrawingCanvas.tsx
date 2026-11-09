@@ -167,7 +167,6 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  // instead of re-projecting the old path. This prevents stale-size flashes.
  // The handoff always contains the FINAL geometry, never an old path.
  // Switching between old and new paths was the source of the release flash.
- const handoffElements=baselineElements;
  const handoffBounds=handoffMatchesSelection?handoff!.bounds:null;
  const handoffRotation=handoffMatchesSelection?handoff!.rotation:0;
  // The selection border has a constant screen-space inset while the
