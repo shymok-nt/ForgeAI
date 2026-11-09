@@ -129,7 +129,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const gestureScale=useSharedValue(1),gestureAngle=useSharedValue(0);
  const gestureDX=useSharedValue(0),gestureDY=useSharedValue(0);
  const transformActive=useSharedValue(false),transformPending=useSharedValue(false);
- const selectionHandoffOpacity=useSharedValue(1);
+ const [handoff,setHandoff]=useState<{elements:Element[];bounds:readonly [number,number,number,number];dx:number;dy:number;scale:number;angle:number}|null>(null);
  const handoffFrame=useRef<number|null>(null);
  const rotateActive=useSharedValue(false),pinchActive=useSharedValue(false);
  const gestureFocalX=useSharedValue(0),gestureFocalY=useSharedValue(0);
@@ -190,6 +190,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    if(Math.abs(dx)+Math.abs(dy)>0.0001)out=moveElement(out,dx,dy);
    return out;
   });
+  // Freeze the final preview as a separate Skia layer while persisted paths update.
+  // No hidden frame or stale geometry is exposed during the handoff.
+  if(handoffFrame.current!==null){cancelAnimationFrame(handoffFrame.current);handoffFrame.current=null;}
+  setHandoff({elements:selectedElements,bounds:b,dx,dy,scale,angle});
   transformPending.value=true;
   onChange(withHeight(next));
  };
@@ -197,14 +201,12 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(transformPending.value){
    gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
    transformPending.value=false;
-   // Skia commits React paths and Reanimated transforms on different frames.
-   // Keep the old preview hidden until both the new path and reset transform
-   // have passed through the renderer; one RAF was too early on web.
+   // Let Skia install the saved geometry before removing the frozen preview.
    if(handoffFrame.current!==null)cancelAnimationFrame(handoffFrame.current);
    handoffFrame.current=requestAnimationFrame(()=>{
     handoffFrame.current=requestAnimationFrame(()=>{
      handoffFrame.current=null;
-     selectionHandoffOpacity.value=1;
+     setHandoff(null);
     });
    });
   }
@@ -371,7 +373,6 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    cornerActive.value=false;cornerMode.value=0;
    if(!blocked.value&&(Math.abs(scale-1)>0.0001||Math.abs(angle)>0.0001)){
     transformPending.value=true;
-    selectionHandoffOpacity.value=0;
     runOnJS(commitGesture)(0,0,scale,angle);
    }else {gestureScale.value=1;gestureAngle.value=0;}
    runOnJS(notify)(false);return;
@@ -415,7 +416,6 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
     const dx=gestureDX.value,dy=gestureDY.value,scale=gestureScale.value,angle=gestureAngle.value;
     transformActive.value=false;
     if(Math.abs(dx)+Math.abs(dy)+Math.abs(scale-1)+Math.abs(angle)>0.0001){
-     selectionHandoffOpacity.value=0;
      runOnJS(commitGesture)(dx,dy,scale,angle);
     }
     else {gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;}
@@ -453,7 +453,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
-  {tool==='select'&&selectedElements.length>0&&<Group transform={selectionTransform} opacity={selectionHandoffOpacity}>{selectedElements.map(element=><StrokeLayer key={element.id} element={element}/>)}</Group>}
+  {tool==='select'&&selectedElements.length>0&&!handoff&&<Group transform={selectionTransform}>{selectedElements.map(element=><StrokeLayer key={element.id} element={element}/>)}</Group>}
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
  {tool==='select'&&selectedBounds&&<Group transform={selectionTransform} opacity={selectionHandoffOpacity}>
@@ -461,6 +461,18 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   {[[selectedBounds[0]-10,selectedBounds[1]-10],[selectedBounds[2]+10,selectedBounds[1]-10],[selectedBounds[0]-10,selectedBounds[3]+10],[selectedBounds[2]+10,selectedBounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
  </Group>}
 
+ {tool==='select'&&handoff&&<Group transform={[
+  {translateX:handoff.dx},{translateY:handoff.dy},
+  {translateX:(handoff.bounds[0]+handoff.bounds[2])/2},
+  {translateY:(handoff.bounds[1]+handoff.bounds[3])/2},
+  {rotate:handoff.angle},{scale:handoff.scale},
+  {translateX:-(handoff.bounds[0]+handoff.bounds[2])/2},
+  {translateY:-(handoff.bounds[1]+handoff.bounds[3])/2}
+ ]}>
+  {handoff.elements.map(element=><StrokeLayer key={element.id} element={element}/>)}
+  <Rect x={handoff.bounds[0]-10} y={handoff.bounds[1]-10} width={handoff.bounds[2]-handoff.bounds[0]+20} height={handoff.bounds[3]-handoff.bounds[1]+20} color="#3388EE" style="stroke" strokeWidth={1.5}/>
+  {[[handoff.bounds[0]-10,handoff.bounds[1]-10],[handoff.bounds[2]+10,handoff.bounds[1]-10],[handoff.bounds[0]-10,handoff.bounds[3]+10],[handoff.bounds[2]+10,handoff.bounds[3]+10]].map((p,i)=><Group key={i}><Circle cx={p[0]} cy={p[1]} r={6} color="#FFFFFF"/><Circle cx={p[0]} cy={p[1]} r={6} color="#3388EE" style="stroke" strokeWidth={2}/></Group>)}
+ </Group>}
  {tool!=='eraser'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
  {tool==='eraser'&&<Circle cx={cursorX} cy={cursorY} r={eraserRadius} color="#808080" opacity={cursorOpacity} style="stroke" strokeWidth={1.5}/>}
  </Group></Canvas></View></GestureDetector></View>;
