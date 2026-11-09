@@ -65,7 +65,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const minZoom=0.8;
  const zoom=useSharedValue(1),offsetX=useSharedValue(0),offsetY=useSharedValue(0);
  const awaitingCommit=useSharedValue(false);
- const draft=useSharedValue(''),baseZoom=useSharedValue(1),baseX=useSharedValue(0),baseY=useSharedValue(0);
+ const draft=useSharedValue(''),baseZoom=useSharedValue(1),baseX=useSharedValue(0),baseY=useSharedValue(0),pinchX=useSharedValue(0),pinchY=useSharedValue(0);
  const samples=useSharedValue<Sample[]>([]),blocked=useSharedValue(false),drawing=useSharedValue(false);
  const selectionStart=useSharedValue<Sample|null>(null);
  const downTime=useSharedValue(0),startX=useSharedValue(0),startY=useSharedValue(0);
@@ -122,9 +122,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;runOnJS(notify)(false);
  }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false}).runOnJS(false);
- const pinch=Gesture.Pinch().onBegin(()=>{blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value}).onUpdate(e=>{
+ const pinch=Gesture.Pinch().onBegin(()=>{blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value;pinchX.value=0;pinchY.value=0}).onUpdate(e=>{
   const z=Math.max(minZoom,Math.min(5,baseZoom.value*e.scale));
-  const [x,y]=clamp(z,baseX.value,baseY.value);zoom.value=z;offsetX.value=x;offsetY.value=y;
+  if(pinchX.value===0&&pinchY.value===0){pinchX.value=e.focalX;pinchY.value=e.focalY}
+  const [x,y]=clamp(z,baseX.value+e.focalX-pinchX.value,baseY.value+e.focalY-pinchY.value);zoom.value=z;offsetX.value=x;offsetY.value=y;
  }).onEnd(()=>{blocked.value=true}).runOnJS(false);
  const doubleTap=Gesture.Tap().numberOfTaps(2).onEnd(()=>{
   const z=zoom.value===1?fitAll/fitWidth:zoom.value<1?2:1;
