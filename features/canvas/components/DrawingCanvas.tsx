@@ -1,4 +1,4 @@
-import React,{memo,useCallback,useMemo,useRef,useState} from 'react';
+import React,{memo,useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {View,type LayoutChangeEvent} from 'react-native';
 import {Canvas,Group,Path,Rect,Line,Circle,vec} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector} from 'react-native-gesture-handler';
@@ -20,6 +20,15 @@ const Completed=memo(function Completed({content,view}:{content:PageContent;view
 export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,onChange,onDrawingActive,shapeKind='rect',shapeFill=false,onSelectionChange,selectionAction}:Props){
  const [selectedIds,setSelectedIds]=useState<string[]>([]);
  const selectedRef=useRef<string[]>([]);selectedRef.current=selectedIds;
+ useEffect(()=>{if(!selectionAction)return;const ids=new Set(selectedRef.current);if(!ids.size)return;let next:Element[]=content.elements;
+ if(selectionAction.kind==='delete')next=next.filter(e=>!ids.has(e.id));
+ if(selectionAction.kind==='duplicate')next=[...next,...next.filter(e=>ids.has(e.id)).map(e=>({...moveElement(e,20,20),id:e.id+'-copy-'+selectionAction.version,z:next.length+1}))];
+ if(selectionAction.kind==='move')next=next.map(e=>ids.has(e.id)?moveElement(e,selectionAction.value??20,selectionAction.value??20):e);
+ if(selectionAction.kind==='scale')next=next.map(e=>ids.has(e.id)?scaleElement(e,(e.bbox[0]+e.bbox[2])/2,(e.bbox[1]+e.bbox[3])/2,selectionAction.value??1.1,selectionAction.value??1.1):e);
+ if(selectionAction.kind==='rotate')next=next.map(e=>ids.has(e.id)?rotateElement(e,(e.bbox[0]+e.bbox[2])/2,(e.bbox[1]+e.bbox[3])/2,selectionAction.value??Math.PI/12):e);
+ if(selectionAction.kind==='color')next=next.map(e=>ids.has(e.id)?e.type==='stroke'?{...e,color:selectionAction.color??e.color}:{...e,stroke:{...e.stroke,color:selectionAction.color??e.stroke.color}}:e);
+ if(next!==content.elements){onChange({v:2,elements:next});if(selectionAction.kind==='delete'){setSelectedIds([]);onSelectionChange?.([])}}
+ },[selectionAction?.version]);
  const [size,setSize]=useState({width:300,height:450});
  const fitWidth=Math.max(0.01,(size.width-4)/PAGE_WIDTH);
  const fitAll=Math.max(0.01,Math.min(fitWidth,(size.height-4)/PAGE_HEIGHT));
@@ -99,6 +108,8 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  {templateLines.map((l,i)=><Line key={i} p1={vec(l.x1,l.y1)} p2={vec(l.x2,l.y2)} color={line} strokeWidth={1.2}/>)}
  {template==='noktalı'&&Array.from({length:Math.floor(PAGE_HEIGHT/42)*Math.floor(PAGE_WIDTH/42)},(_,i)=>{const cols=Math.floor(PAGE_WIDTH/42);return <Circle key={i} cx={(i%cols)*42+21} cy={Math.floor(i/cols)*42+21} r={1.5} color={line}/>})}
  <Completed content={content} view={view}/>
+ {selectedIds.length>0&&(()=>{const es=content.elements.filter(e=>selectedIds.includes(e.id));if(!es.length)return null;const b=[Math.min(...es.map(e=>e.bbox[0])),Math.min(...es.map(e=>e.bbox[1])),Math.max(...es.map(e=>e.bbox[2])),Math.max(...es.map(e=>e.bbox[3]))];return <><Rect x={b[0]} y={b[1]} width={b[2]-b[0]} height={b[3]-b[1]} color="#3388EE" style="stroke" strokeWidth={2}/>{[[b[0],b[1]],[b[2],b[1]],[b[0],b[3]],[b[2],b[3]]].map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={7} color="#FFFFFF"/>)}</>})()}
+
  <Path path={draft} color={brush.color} opacity={tool==='highlighter'?0.35:brush.opacity} style="stroke" strokeWidth={tool==='highlighter'?brush.width*5:brush.width} strokeCap="round" strokeJoin="round"/>
  </Group></Canvas></View></GestureDetector></View>;
 }
