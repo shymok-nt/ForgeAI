@@ -1,5 +1,5 @@
 import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
-import {View,PixelRatio,type LayoutChangeEvent} from 'react-native';
+import {View,PixelRatio,Platform,type LayoutChangeEvent} from 'react-native';
 import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,Skia,vec} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector} from 'react-native-gesture-handler';
 import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
@@ -385,6 +385,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const imageCorner=useSharedValue(false),imageCornerStart=useSharedValue(1),imageCornerX=useSharedValue(0),imageCornerY=useSharedValue(0);
  const imageCommittedX=useSharedValue(0),imageCommittedY=useSharedValue(0),imageCommittedScale=useSharedValue(1),imageCommittedAngle=useSharedValue(0);
  const imageHandoff=useRef(false);
+ // Keep the selected image's rendered geometry frozen until the Skia preview
+ // and persisted geometry can be reconciled together, like shape selection.
+ const [paintedImage,setPaintedImage]=useState<import('@/features/canvas/types').PageImage|null>(null);
+ const paintedImageRef=useRef<import('@/features/canvas/types').PageImage|null>(null);
+ paintedImageRef.current=paintedImage;
  
  const imageTransform=useDerivedValue(()=>{const b=imageBounds.value,cx=b?(b[0]+b[2])/2:0,cy=b?(b[1]+b[3])/2:0;return [{translateX:imageCommittedX.value+imageDX.value+imageFocalDX.value},{translateY:imageCommittedY.value+imageDY.value+imageFocalDY.value},{translateX:cx},{translateY:cy},{rotate:imageCommittedAngle.value+imageAngle.value},{scale:imageCommittedScale.value*imageScale.value},{translateX:-cx},{translateY:-cy}]});
  const commitImagePinch=(dx:number,dy:number,scale:number,angle:number)=>{imageHandoff.current=true;const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).map(i=>{if(i.id!==id)return i;const w=Math.max(40,i.width*scale),h=Math.max(40,i.height*scale);return {...i,x:i.x+(i.width-w)/2+dx,y:i.y+(i.height-h)/2+dy,width:w,height:h,rotation:(i.rotation??0)+angle}})})};
@@ -395,9 +400,12 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  // would shift the transform origin one frame after the image was repainted.
  useLayoutEffect(()=>{
   const i=(content.images??[]).find(x=>x.id===imageId);
-  imageBounds.value=i?[i.x,i.y,i.x+i.width,i.y+i.height]:null;
-  if(!imageHandoff.current)return;
+  if(!imageHandoff.current){imageBounds.value=i?[i.x,i.y,i.x+i.width,i.y+i.height]:null;setPaintedImage(i??null);return;}
+  // The old image stays painted under the accumulated UI-thread transform
+  // while React saves the new geometry. Rebase the painted image afterwards.
   imageHandoff.current=false;
+  imageBounds.value=i?[i.x,i.y,i.x+i.width,i.y+i.height]:null;
+  setPaintedImage(i??null);
   imageCommittedX.value=0;imageCommittedY.value=0;
   imageCommittedScale.value=1;imageCommittedAngle.value=0;
  },[imageId,content.images]);
@@ -407,7 +415,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(blocked.value||e.numberOfPointers!==1)return;
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
   if(tool==='hand'){baseX.value=offsetX.value;baseY.value=offsetY.value;return}
-  if(imageBounds.value){const p=pagePoint(e.x,e.y),b=imageBounds.value;const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;const radius=24/(fitWidth*zoom.value);const cornerX=b[2],cornerY=b[3];if(Math.hypot(p[0]-cornerX,p[1]-cornerY)<radius){imageCorner.value=true;imageCornerStart.value=Math.max(1,Math.hypot(p[0]-cx,p[1]-cy));imageCornerX.value=cx;imageCornerY.value=cy;imageScale.value=1;return;}if(p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3]){imageDragging.value=true;imageDX.value=0;imageDY.value=0;return;}}
+  if(imageBounds.value){const p=pagePoint(e.x,e.y),b=imageBounds.value;const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;const radius=24/(fitWidth*zoom.value);const cornerX=b[2],cornerY=b[3];if(Platform.OS==='web'&&Math.hypot(p[0]-cornerX,p[1]-cornerY)<radius){imageCorner.value=true;imageCornerStart.value=Math.max(1,Math.hypot(p[0]-cx,p[1]-cy));imageCornerX.value=cx;imageCornerY.value=cy;imageScale.value=1;return;}if(p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3]){imageDragging.value=true;imageDX.value=0;imageDY.value=0;return;}}
   // Drag an already selected element immediately; don't wait for a long press.
   // The previous zero-distance Pan gesture prevented LongPress from reliably activating.
   if(tool==='select'&&selectionBoundsValue.value){
@@ -615,7 +623,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <GestureDetector gesture={gestures}><View style={{flex:1,touchAction:'none'}}><Canvas style={{flex:1}}>
  <Group transform={transform}>
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
- {(content.images??[]).map(item=>{const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={3}/>{[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={9} color="#FFFFFF"/><Circle cx={x} cy={y} r={9} color="#3388EE" style="stroke" strokeWidth={3}/></Group>)}</>}</Group>;return item.id===imageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
+ {(content.images??[]).map(source=>{const item=source.id===imageId&&paintedImage?paintedImage:source;const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={3}/>{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={9} color="#FFFFFF"/><Circle cx={x} cy={y} r={9} color="#3388EE" style="stroke" strokeWidth={3}/></Group>)}</>}</Group>;return item.id===imageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
