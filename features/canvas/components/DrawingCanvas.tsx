@@ -382,18 +382,22 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const imagePinching=useSharedValue(false),imageScale=useSharedValue(1),imageAngle=useSharedValue(0),imageRotateActive=useSharedValue(false),imagePinchActive=useSharedValue(false);
  const imageFocalX=useSharedValue(0),imageFocalY=useSharedValue(0),imageFocalDX=useSharedValue(0),imageFocalDY=useSharedValue(0);
  const imageBounds=useSharedValue<[number,number,number,number]|null>(null);
+ const imageCorner=useSharedValue(false),imageCornerStart=useSharedValue(1),imageCornerX=useSharedValue(0),imageCornerY=useSharedValue(0);
+ const imageCommittedX=useSharedValue(0),imageCommittedY=useSharedValue(0),imageCommittedScale=useSharedValue(1),imageCommittedAngle=useSharedValue(0);
+ const imageHandoff=useRef(false);
  useEffect(()=>{const i=(content.images??[]).find(x=>x.id===imageId);imageBounds.value=i?[i.x,i.y,i.x+i.width,i.y+i.height]:null},[imageId,content.images]);
- const imageTransform=useDerivedValue(()=>{const b=imageBounds.value,cx=b?(b[0]+b[2])/2:0,cy=b?(b[1]+b[3])/2:0;return [{translateX:imageDX.value+imageFocalDX.value},{translateY:imageDY.value+imageFocalDY.value},{translateX:cx},{translateY:cy},{rotate:imageAngle.value},{scale:imageScale.value},{translateX:-cx},{translateY:-cy}]});
- const commitImagePinch=(dx:number,dy:number,scale:number,angle:number)=>{const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).map(i=>{if(i.id!==id)return i;const w=Math.max(40,i.width*scale),h=Math.max(40,i.height*scale);return {...i,x:i.x+(i.width-w)/2+dx,y:i.y+(i.height-h)/2+dy,width:w,height:h,rotation:(i.rotation??0)+angle}})})};
- const finishImagePinch=()=>{'worklet';const dx=imageFocalDX.value,dy=imageFocalDY.value,scale=imageScale.value,angle=imageAngle.value;imagePinching.value=false;imageFocalDX.value=0;imageFocalDY.value=0;imageScale.value=1;imageAngle.value=0;if(Math.abs(dx)+Math.abs(dy)+Math.abs(scale-1)+Math.abs(angle)>0.0001)runOnJS(commitImagePinch)(dx,dy,scale,angle)};
- const commitImageMove=(dx:number,dy:number)=>{const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).map(i=>i.id===id?{...i,x:i.x+dx,y:i.y+dy}:i)})};
+ const imageTransform=useDerivedValue(()=>{const b=imageBounds.value,cx=b?(b[0]+b[2])/2:0,cy=b?(b[1]+b[3])/2:0;return [{translateX:imageCommittedX.value+imageDX.value+imageFocalDX.value},{translateY:imageCommittedY.value+imageDY.value+imageFocalDY.value},{translateX:cx},{translateY:cy},{rotate:imageCommittedAngle.value+imageAngle.value},{scale:imageCommittedScale.value*imageScale.value},{translateX:-cx},{translateY:-cy}]});
+ const commitImagePinch=(dx:number,dy:number,scale:number,angle:number)=>{imageHandoff.current=true;const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).map(i=>{if(i.id!==id)return i;const w=Math.max(40,i.width*scale),h=Math.max(40,i.height*scale);return {...i,x:i.x+(i.width-w)/2+dx,y:i.y+(i.height-h)/2+dy,width:w,height:h,rotation:(i.rotation??0)+angle}})})};
+ const finishImagePinch=()=>{'worklet';const dx=imageFocalDX.value,dy=imageFocalDY.value,scale=imageScale.value,angle=imageAngle.value;imagePinching.value=false;imageCommittedX.value+=dx;imageCommittedY.value+=dy;imageCommittedScale.value*=scale;imageCommittedAngle.value+=angle;imageFocalDX.value=0;imageFocalDY.value=0;imageScale.value=1;imageAngle.value=0;if(Math.abs(dx)+Math.abs(dy)+Math.abs(scale-1)+Math.abs(angle)>0.0001)runOnJS(commitImagePinch)(dx,dy,scale,angle)};
+ const commitImageMove=(dx:number,dy:number)=>{imageHandoff.current=true;const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).map(i=>i.id===id?{...i,x:i.x+dx,y:i.y+dy}:i)})};
+ useLayoutEffect(()=>{if(!imageHandoff.current)return;imageHandoff.current=false;imageCommittedX.value=0;imageCommittedY.value=0;imageCommittedScale.value=1;imageCommittedAngle.value=0;},[content.images]);
  const pan=Gesture.Pan().minDistance(0).onTouchesDown(e=>{
   if(e.allTouches.length>1){blocked.value=true;imageDragging.value=false;imageDX.value=0;imageDY.value=0;samples.value=[];draft.value='';drawing.value=false}
  }).onBegin(e=>{
   if(blocked.value||e.numberOfPointers!==1)return;
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
   if(tool==='hand'){baseX.value=offsetX.value;baseY.value=offsetY.value;return}
-  if(imageBounds.value){const p=pagePoint(e.x,e.y),b=imageBounds.value;if(p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3]){imageDragging.value=true;imageDX.value=0;imageDY.value=0;return;}}
+  if(imageBounds.value){const p=pagePoint(e.x,e.y),b=imageBounds.value;const cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;const radius=24/(fitWidth*zoom.value);const cornerX=b[2],cornerY=b[3];if(Math.hypot(p[0]-cornerX,p[1]-cornerY)<radius){imageCorner.value=true;imageCornerStart.value=Math.max(1,Math.hypot(p[0]-cx,p[1]-cy));imageCornerX.value=cx;imageCornerY.value=cy;imageScale.value=1;return;}if(p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3]){imageDragging.value=true;imageDX.value=0;imageDY.value=0;return;}}
   // Drag an already selected element immediately; don't wait for a long press.
   // The previous zero-distance Pan gesture prevented LongPress from reliably activating.
   if(tool==='select'&&selectionBoundsValue.value){
@@ -445,6 +449,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
  }).onUpdate(e=>{
   if(blocked.value||e.numberOfPointers!==1)return;
+  if(imageCorner.value){const p=pagePoint(e.x,e.y);imageScale.value=Math.max(0.15,Math.min(8,Math.hypot(p[0]-imageCornerX.value,p[1]-imageCornerY.value)/imageCornerStart.value));return;}
   if(imageDragging.value){imageDX.value=e.translationX/(fitWidth*zoom.value);imageDY.value=e.translationY/(fitWidth*zoom.value);return}
   if(tool==='hand'){const [x,y]=clamp(zoom.value,baseX.value+e.translationX,baseY.value+e.translationY);offsetX.value=x;offsetY.value=y;return}
   if(cornerActive.value){
@@ -495,7 +500,8 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
   if(tool==='eraser'){cursorX.value=p[0];cursorY.value=p[1];cursorOn.value=true}
  }).onEnd(()=>{
-  if(imageDragging.value){const dx=imageDX.value,dy=imageDY.value;imageDragging.value=false;imageDX.value=0;imageDY.value=0;if(!imagePinching.value&&Math.hypot(dx,dy)>0.1)runOnJS(commitImageMove)(dx,dy);return;}
+  if(imageCorner.value){const scale=imageScale.value;imageCorner.value=false;imageCommittedScale.value*=scale;imageScale.value=1;if(Math.abs(scale-1)>0.0001)runOnJS(commitImagePinch)(0,0,scale,0);return;}
+  if(imageDragging.value){const dx=imageDX.value,dy=imageDY.value;imageDragging.value=false;imageDX.value=0;imageDY.value=0;if(!imagePinching.value&&Math.hypot(dx,dy)>0.1){imageCommittedX.value+=dx;imageCommittedY.value+=dy;runOnJS(commitImageMove)(dx,dy);}return;}
   if(cornerActive.value){
    const scale=gestureScale.value,angle=gestureAngle.value;
    cornerActive.value=false;cornerMode.value=0;
@@ -599,7 +605,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <GestureDetector gesture={gestures}><View style={{flex:1,touchAction:'none'}}><Canvas style={{flex:1}}>
  <Group transform={transform}>
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
- {(content.images??[]).map(item=>{const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={3}/>}</Group>;return item.id===imageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
+ {(content.images??[]).map(item=>{const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={3}/>{[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={9} color="#FFFFFF"/><Circle cx={x} cy={y} r={9} color="#3388EE" style="stroke" strokeWidth={3}/></Group>)}</>}</Group>;return item.id===imageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
