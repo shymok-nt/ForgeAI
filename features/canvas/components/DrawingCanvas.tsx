@@ -675,7 +675,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  }).runOnJS(false);
  const rotation=Gesture.Rotation().onBegin(()=>{
   if(imageBounds.value){imageGestureLocked.value=true;imagePinching.value=true;imageRotateActive.value=true;blocked.value=true;samples.value=[];drawing.value=false;draft.value='';return;}
-  if(tool==='select'&&selectionBoundsValue.value){rotateActive.value=true;}
+  if(tool==='select'&&selectionBoundsValue.value){if(!transformActive.value){gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;}transformActive.value=true;selectionPreviewLive.value=true;rotateActive.value=true;blocked.value=true;return;}
  }).onUpdate(e=>{
   if(imageGestureLocked.value){imageAngle.value=e.rotation;return;}
   if(tool==='select'&&transformActive.value)gestureAngle.value=e.rotation;
