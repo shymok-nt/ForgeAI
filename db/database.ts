@@ -20,8 +20,8 @@ async function openAndMigrate(){
  const result=await db.getFirstAsync<{user_version:number}>('PRAGMA user_version');
  const current=result?.user_version??0;
  for(const migration of migrations.filter(m=>m.version>current).sort((a,b)=>a.version-b.version)){
-  await db.withExclusiveTransactionAsync(async tx=>{
-   await migration.run(tx as SQLite.SQLiteDatabase);
+  await withSafeTransaction(db,async tx=>{
+   await migration.run(tx);
    await tx.execAsync(`PRAGMA user_version = ${migration.version}`);
   });
  }
