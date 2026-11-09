@@ -73,26 +73,32 @@ export default function NoteCanvasScreen(){
  <View pointerEvents="none" style={{position:'absolute',bottom:tablet?22:110,right:24,backgroundColor:'#1B1B2FBB',borderRadius:20,paddingHorizontal:12,paddingVertical:7}}><Text style={{color:'#FFFFFF',fontSize:12}}>{index+1} / {pages.length}</Text></View>
  {focus&&<Pressable accessibilityRole="button" accessibilityLabel="Araç çubuklarını göster" onPress={()=>setFocus(false)} style={{position:'absolute',top:0,left:0,right:0,height:44,alignItems:'center',justifyContent:'center'}}><Eye color={colors.accent} size={20}/></Pressable>}
  {!tablet&&!focus&&<View style={{position:'absolute',bottom:28,left:12,right:12}}><CanvasToolbar tablet={false} tool={tool} colors={colors} onTool={chooseTool} onPages={()=>setSheet(true)}/></View>}
- {tool==='select'&&selectedElements.length>0&&<View style={{position:'absolute',top:10,left:12,right:12,zIndex:25,backgroundColor:colors.surfaceRaised,borderRadius:20,paddingHorizontal:12,paddingVertical:10,borderWidth:1,borderColor:colors.divider,shadowColor:'#000',shadowOpacity:0.12,shadowRadius:14,elevation:8}}>
- <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-  <View style={{flexDirection:'row',alignItems:'center',gap:8}}><Move size={16} color={colors.accent}/><Text style={{fontFamily:fonts.semibold,color:ink,fontSize:14}}>{selectedElements.length===1?'Şekil seçildi':selectedElements.length+' öğe seçildi'}</Text></View>
-  <Pressable accessibilityRole="button" accessibilityLabel="Seçimi kapat" onPress={()=>setTool('select')} style={{padding:6}}><Text style={{color:muted,fontSize:11}}>Sürükleyerek taşı</Text></Pressable>
+ {tool==='select'&&selectedElements.length>0&&<View style={{position:'absolute',top:10,left:12,right:12,zIndex:25,backgroundColor:colors.surfaceRaised,borderRadius:20,paddingHorizontal:14,paddingTop:12,paddingBottom:14,borderWidth:1,borderColor:colors.divider,shadowColor:'#000',shadowOpacity:0.12,shadowRadius:14,elevation:8}}>
+ <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+  <View style={{flexDirection:'row',alignItems:'center',gap:9}}><Move size={17} color={colors.accent}/><Text style={{fontFamily:fonts.semibold,color:ink,fontSize:14}}>{selectedElements.length===1?'Şekil seçildi':selectedElements.length+' öğe seçildi'}</Text></View>
+  <Text style={{color:muted,fontFamily:fonts.body,fontSize:11}}>Basılı tut ve taşı</Text>
  </View>
- <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:6}}>
-  <View style={{flex:1,flexDirection:'row',alignItems:'center',justifyContent:'space-around',backgroundColor:colors.background,borderRadius:12,paddingVertical:3}}>
-   <RotateCw size={17} color={colors.accent}/>
-   <Pressable accessibilityRole="button" accessibilityLabel="15 derece sola döndür" onPress={()=>action('rotate',-Math.PI/12)} style={hit}><Minus size={18} color={ink}/></Pressable>
-   <Text style={{fontFamily:fonts.semibold,color:ink,fontSize:11}}>15°</Text>
-   <Pressable accessibilityRole="button" accessibilityLabel="15 derece sağa döndür" onPress={()=>action('rotate',Math.PI/12)} style={hit}><Plus size={18} color={ink}/></Pressable>
+ <View style={{flexDirection:'row',gap:10,alignItems:'stretch'}}>
+  <View style={{flex:1,minWidth:0,backgroundColor:colors.background,borderRadius:14,paddingHorizontal:10,paddingTop:9,paddingBottom:7,borderWidth:1,borderColor:colors.divider}}>
+   <View style={{flexDirection:'row',alignItems:'center',gap:7,marginBottom:6}}><RotateCw size={16} color={colors.accent}/><Text style={{fontFamily:fonts.semibold,color:ink,fontSize:12}}>Döndür</Text></View>
+   <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:6}}>
+    <Pressable accessibilityRole="button" accessibilityLabel="15 derece sola döndür" onPress={()=>action('rotate',-Math.PI/12)} style={{width:42,height:42,borderRadius:11,backgroundColor:colors.surfaceRaised,alignItems:'center',justifyContent:'center'}}><RotateCw size={18} color={ink} style={{transform:[{scaleX:-1}]}}/></Pressable>
+    <Text style={{fontFamily:fonts.semibold,color:muted,fontSize:11}}>15°</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel="15 derece sağa döndür" onPress={()=>action('rotate',Math.PI/12)} style={{width:42,height:42,borderRadius:11,backgroundColor:colors.surfaceRaised,alignItems:'center',justifyContent:'center'}}><RotateCw size={18} color={ink}/></Pressable>
+   </View>
   </View>
-  <View style={{flex:1,flexDirection:'row',alignItems:'center',justifyContent:'space-around',backgroundColor:colors.background,borderRadius:12,paddingVertical:3}}>
-   <Maximize2 size={17} color={colors.accent}/>
-   <Pressable accessibilityRole="button" accessibilityLabel="Yüzde 10 küçült" onPress={()=>action('scale',0.9)} style={hit}><Minus size={18} color={ink}/></Pressable>
-   <Text style={{fontFamily:fonts.semibold,color:ink,fontSize:11}}>10%</Text>
-   <Pressable accessibilityRole="button" accessibilityLabel="Yüzde 10 büyüt" onPress={()=>action('scale',1.1)} style={hit}><Plus size={18} color={ink}/></Pressable>
+  <View style={{flex:1,minWidth:0,backgroundColor:colors.background,borderRadius:14,paddingHorizontal:10,paddingTop:9,paddingBottom:7,borderWidth:1,borderColor:colors.divider}}>
+   <View style={{flexDirection:'row',alignItems:'center',gap:7,marginBottom:6}}><Maximize2 size={16} color={colors.accent}/><Text style={{fontFamily:fonts.semibold,color:ink,fontSize:12}}>Boyut</Text></View>
+   <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:6}}>
+    <Pressable accessibilityRole="button" accessibilityLabel="Yüzde 10 küçült" onPress={()=>action('scale',0.9)} style={{width:42,height:42,borderRadius:11,backgroundColor:colors.surfaceRaised,alignItems:'center',justifyContent:'center'}}><Minus size={19} color={ink}/></Pressable>
+    <Text style={{fontFamily:fonts.semibold,color:muted,fontSize:11}}>10%</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel="Yüzde 10 büyüt" onPress={()=>action('scale',1.1)} style={{width:42,height:42,borderRadius:11,backgroundColor:colors.surfaceRaised,alignItems:'center',justifyContent:'center'}}><Plus size={19} color={ink}/></Pressable>
+   </View>
   </View>
-  <Pressable accessibilityRole="button" accessibilityLabel="Çoğalt" onPress={()=>action('duplicate')} style={{width:42,height:44,alignItems:'center',justifyContent:'center'}}><Copy size={19} color={ink}/></Pressable>
-  <Pressable accessibilityRole="button" accessibilityLabel="Sil" onPress={()=>action('delete')} style={{width:42,height:44,alignItems:'center',justifyContent:'center'}}><Trash2 size={19} color={colors.coral}/></Pressable>
+ </View>
+ <View style={{flexDirection:'row',justifyContent:'flex-end',gap:8,marginTop:10}}>
+  <Pressable accessibilityRole="button" accessibilityLabel="Seçili şekli çoğalt" onPress={()=>action('duplicate')} style={{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,minHeight:40,paddingHorizontal:14,borderRadius:11,backgroundColor:colors.background}}><Copy size={16} color={ink}/><Text style={{color:ink,fontFamily:fonts.semibold,fontSize:12}}>Çoğalt</Text></Pressable>
+  <Pressable accessibilityRole="button" accessibilityLabel="Seçili şekli sil" onPress={()=>action('delete')} style={{flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,minHeight:40,paddingHorizontal:14,borderRadius:11,backgroundColor:colors.coral+'16'}}><Trash2 size={16} color={colors.coral}/><Text style={{color:colors.coral,fontFamily:fonts.semibold,fontSize:12}}>Sil</Text></Pressable>
  </View>
  </View>}
  {ruler&&<View pointerEvents="none" style={{position:'absolute',top:'45%',left:'15%',width:'70%',height:64,backgroundColor:colors.accent+'55',borderWidth:1,borderColor:colors.accent,borderRadius:6,justifyContent:'center',alignItems:'center'}}><Text style={{color:ink}}>0°   | | | | | | | | | | | |</Text></View>}
