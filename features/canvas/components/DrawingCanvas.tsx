@@ -67,8 +67,8 @@ const StrokeLayer=memo(function StrokeLayer({element}:{element:Element}){
  if(element.type==='shape')return <>{element.fill&&<Path path={path} color={element.fill.color} opacity={element.fill.opacity} style="fill"/>}<Path path={path} color={element.stroke.color} opacity={element.stroke.opacity} style="stroke" strokeWidth={element.stroke.width}/></>;
  return <Path path={path} color={element.color} opacity={element.opacity} blendMode={element.tool==='highlighter'?'multiply':'srcOver'} {...(element.renderMode==='centerline'?{style:'stroke' as const,strokeWidth:element.width,strokeCap:'round' as const,strokeJoin:'round' as const}:{})}/>;
 });
-const Completed=memo(function Completed({content}:{content:PageContent}){
- return <>{content.elements.map(element=><StrokeLayer key={element.id} element={element}/>)}</>;
+const Completed=memo(function Completed({content,hiddenIds}:{content:PageContent;hiddenIds?:string[]}){
+ return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)).map(element=><StrokeLayer key={element.id} element={element}/>)}</>;
 });
 export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction}:Props){
  const [selectedIds,setSelectedIds]=useState<string[]>([]);
@@ -96,6 +96,21 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const cursorOpacity=useDerivedValue(()=>cursorOn.value?0.6:0);
  const draft=useSharedValue(''),baseZoom=useSharedValue(1),baseX=useSharedValue(0),baseY=useSharedValue(0),pinchX=useSharedValue(0),pinchY=useSharedValue(0);
  const samples=useSharedValue<Sample[]>([]),blocked=useSharedValue(false),drawing=useSharedValue(false);
+ const dragX=useSharedValue(0),dragY=useSharedValue(0),draggingSelection=useSharedValue(false);
+ const selectedElements=useMemo(()=>content.elements.filter(e=>selectedIds.includes(e.id)),[content,selectedIds]);
+ const selectedBounds=useMemo(()=>{
+  if(!selectedElements.length)return null;
+  return [Math.min(...selectedElements.map(e=>e.bbox[0])),Math.min(...selectedElements.map(e=>e.bbox[1])),Math.max(...selectedElements.map(e=>e.bbox[2])),Math.max(...selectedElements.map(e=>e.bbox[3]))] as const;
+ },[selectedElements]);
+ const selectionBoundsValue=useSharedValue<readonly [number,number,number,number]|null>(null);
+ useEffect(()=>{selectionBoundsValue.value=selectedBounds;},[selectedBounds]);
+ const dragTransform=useDerivedValue(()=>[{translateX:dragX.value},{translateY:dragY.value}]);
+ const commitSelectionMove=(dx:number,dy:number)=>{
+  if(Math.hypot(dx,dy)<0.1)return;
+  const ids=new Set(selectedRef.current);
+  if(!ids.size)return;
+  onChange(withHeight(content.elements.map(e=>ids.has(e.id)?moveElement(e,dx,dy):e)));
+ };
  const selectionStart=useSharedValue<Sample|null>(null);
  const downTime=useSharedValue(0),startX=useSharedValue(0),startY=useSharedValue(0);
  const originX=useDerivedValue(()=>(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value);
@@ -166,6 +181,14 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(blocked.value||e.numberOfPointers!==1)return;
   startX.value=e.x;startY.value=e.y;downTime.value=Date.now();
   if(tool==='hand'){baseX.value=offsetX.value;baseY.value=offsetY.value;return}
+  if(tool==='select'){
+   const p=pagePoint(e.x,e.y),b=selectionBoundsValue.value;
+   const margin=12/(fitWidth*zoom.value);
+   if(b&&p[0]>=b[0]-margin&&p[0]<=b[2]+margin&&p[1]>=b[1]-margin&&p[1]<=b[3]+margin){
+    draggingSelection.value=true;dragX.value=0;dragY.value=0;
+    drawing.value=true;runOnJS(notify)(true);return;
+   }
+  }
   samples.value=[pagePoint(e.x,e.y)];drawing.value=false;draft.value='';
   if(tool==='eraser'){
     const q=samples.value[0];
@@ -175,6 +198,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  }).onUpdate(e=>{
   if(blocked.value||e.numberOfPointers!==1)return;
   if(tool==='hand'){const [x,y]=clamp(zoom.value,baseX.value+e.translationX,baseY.value+e.translationY);offsetX.value=x;offsetY.value=y;return}
+  if(draggingSelection.value){
+   dragX.value=e.translationX/(fitWidth*zoom.value);
+   dragY.value=e.translationY/(fitWidth*zoom.value);
+   return;
+  }
   const p=pagePoint(e.x,e.y),prev=samples.value[samples.value.length-1];
   if(prev&&Math.hypot((p[0]-prev[0])*fitWidth*zoom.value,(p[1]-prev[1])*fitWidth*zoom.value)<1.5)return;
   samples.value=[...samples.value,p];
@@ -192,9 +220,16 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
   if(tool==='eraser'){cursorX.value=p[0];cursorY.value=p[1];cursorOn.value=true}
  }).onEnd(()=>{
+  if(draggingSelection.value){
+   const dx=dragX.value,dy=dragY.value;
+   draggingSelection.value=false;
+   if(!blocked.value&&Math.hypot(dx,dy)>0.1)runOnJS(commitSelectionMove)(dx,dy);
+   dragX.value=0;dragY.value=0;drawing.value=false;
+   runOnJS(notify)(false);return;
+  }
   if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;cursorOn.value=false;runOnJS(notify)(false);
- }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false}).runOnJS(false);
+ }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false}).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(()=>{blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value;pinchX.value=0;pinchY.value=0}).onUpdate(e=>{
   const z=Math.max(minZoom,Math.min(5,baseZoom.value*e.scale));
   if(pinchX.value===0&&pinchY.value===0){pinchX.value=e.focalX;pinchY.value=e.focalY}
@@ -211,10 +246,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <Group transform={transform}>
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
  <Group layer={tool==='eraser'}>
-  <Completed content={content}/>
+  <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
+  {tool==='select'&&selectedElements.length>0&&<Group transform={dragTransform}>{selectedElements.map(element=><StrokeLayer key={element.id} element={element}/>)}</Group>}
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
- {selectedIds.length>0&&(()=>{const es=content.elements.filter(e=>selectedIds.includes(e.id));if(!es.length)return null;const b=[Math.min(...es.map(e=>e.bbox[0])),Math.min(...es.map(e=>e.bbox[1])),Math.max(...es.map(e=>e.bbox[2])),Math.max(...es.map(e=>e.bbox[3]))];return <><Rect x={b[0]} y={b[1]} width={b[2]-b[0]} height={b[3]-b[1]} color="#3388EE" style="stroke" strokeWidth={2}/>{[[b[0],b[1]],[b[2],b[1]],[b[0],b[3]],[b[2],b[3]]].map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={7} color="#FFFFFF"/>)}</>})()}
+ {tool==='select'&&selectedBounds&&<Group transform={dragTransform}><Rect x={selectedBounds[0]} y={selectedBounds[1]} width={selectedBounds[2]-selectedBounds[0]} height={selectedBounds[3]-selectedBounds[1]} color="#3388EE" style="stroke" strokeWidth={2}/>{[[selectedBounds[0],selectedBounds[1]],[selectedBounds[2],selectedBounds[1]],[selectedBounds[0],selectedBounds[3]],[selectedBounds[2],selectedBounds[3]]].map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={7} color="#FFFFFF"/>)}</Group>}
 
  {tool!=='eraser'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
  {tool==='eraser'&&<Circle cx={cursorX} cy={cursorY} r={eraserRadius} color="#808080" opacity={cursorOpacity} style="stroke" strokeWidth={1.5}/>}
