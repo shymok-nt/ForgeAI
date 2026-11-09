@@ -67,3 +67,7 @@ Render sırası: Skia Canvas üzerinde kâğıt/şablon, bbox ile filtrelenen ka
 Gerekli Expo bağımlılıklarını yerel makinede `npx expo install react-native-gesture-handler react-native-reanimated react-native-worklets expo-haptics expo-keep-awake` ve `npm install perfect-freehand` komutlarıyla SDK sürümüne uygun kurun. Stylus basıncı/eğimi ve gelişmiş palm rejection için Expo Go yerine development build gerekebilir.
 
 **Henüz tamamlanmamış Parça 1 özellikleri:** gerçek stylus basıncı/palm rejection, iki/üç parmak kısayolları, pixel eraser, çoklu preset kalıcılığı, thumbnail üretimi, odak modu, gelişmiş zoom sınırları ve performans testleri. Bu sürüm temel çizim/çizgi silgi/undo-redo/SQLite kayıt iskeletidir; 60 fps veya tüm cihazlarda sorunsuz çalıştığı doğrulanmamıştır.
+
+## Çizim performansı testleri
+
+Expo Go geliştirme modundaki FPS gerçek cihaz performansını yansıtmayabilir. Android release derlemesinde test edin: `npx expo run:android --variant release` veya `eas build --profile preview`. Çok çizgili sayfalar, çoklu dokunma ve arka plana geçişten sonra kayıt ayrıca test edilmelidir.
