@@ -130,6 +130,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const gestureDX=useSharedValue(0),gestureDY=useSharedValue(0);
  const transformActive=useSharedValue(false),transformPending=useSharedValue(false);
  const [handoff,setHandoff]=useState<{elements:Element[];bounds:readonly [number,number,number,number];dx:number;dy:number;scale:number;angle:number}|null>(null);
+ const pendingHandoff=useRef(false);
  const handoffFrame=useRef<number|null>(null);
  const rotateActive=useSharedValue(false),pinchActive=useSharedValue(false);
  const gestureFocalX=useSharedValue(0),gestureFocalY=useSharedValue(0);
@@ -162,10 +163,12 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(Math.hypot(dx,dy)<0.1)return;
   const ids=new Set(selectedRef.current);
   if(!ids.size)return;
-  dragPending.value=true;
+  const b=selectedBounds;
+  if(!b)return;
+  pendingHandoff.current=true;
+  setHandoff({elements:selectedElements,bounds:b,dx,dy,scale:1,angle:0});
   onChange(withHeight(content.elements.map(e=>ids.has(e.id)?moveElement(e,dx,dy):e)));
  };
- useLayoutEffect(()=>{if(dragPending.value){dragX.value=0;dragY.value=0;dragPending.value=false}},[content]);
  const commitGesture=(dx:number,dy:number,scale:number,angle:number)=>{
   const ids=new Set(selectedRef.current);
   if(!ids.size)return;
@@ -190,27 +193,38 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    if(Math.abs(dx)+Math.abs(dy)>0.0001)out=moveElement(out,dx,dy);
    return out;
   });
-  // Freeze the final preview as a separate Skia layer while persisted paths update.
-  // No hidden frame or stale geometry is exposed during the handoff.
+  // Keep the last visible pose until the persisted geometry is ready.
   if(handoffFrame.current!==null){cancelAnimationFrame(handoffFrame.current);handoffFrame.current=null;}
+  pendingHandoff.current=true;
   setHandoff({elements:selectedElements,bounds:b,dx,dy,scale,angle});
-  transformPending.value=true;
   onChange(withHeight(next));
  };
+ // The handoff layer must mount before the UI-thread transform is reset.
+ // Otherwise Skia paints the old geometry at its original position for one frame.
  useLayoutEffect(()=>{
-  if(transformPending.value){
-   gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
-   transformPending.value=false;
-   // Let Skia install the saved geometry before removing the frozen preview.
-   if(handoffFrame.current!==null)cancelAnimationFrame(handoffFrame.current);
+  if(!handoff)return;
+  dragX.value=0;dragY.value=0;dragPending.value=false;
+  gestureScale.value=1;gestureAngle.value=0;gestureDX.value=0;gestureDY.value=0;
+  transformPending.value=false;
+ },[handoff]);
+ useLayoutEffect(()=>{
+  if(!handoff||!pendingHandoff.current)return;
+  // Wait for the actual updated content, not an arbitrary number of frames
+  // after the pointer is released.
+  const committed=handoff.elements.every(old=>{
+   const now=content.elements.find(e=>e.id===old.id);
+   return now&&now!==old;
+  });
+  if(!committed)return;
+  pendingHandoff.current=false;
+  if(handoffFrame.current!==null)cancelAnimationFrame(handoffFrame.current);
+  handoffFrame.current=requestAnimationFrame(()=>{
    handoffFrame.current=requestAnimationFrame(()=>{
-    handoffFrame.current=requestAnimationFrame(()=>{
-     handoffFrame.current=null;
-     setHandoff(null);
-    });
+    handoffFrame.current=null;
+    setHandoff(null);
    });
-  }
- },[content]);
+  });
+ },[content,handoff]);
  useEffect(()=>()=>{if(handoffFrame.current!==null)cancelAnimationFrame(handoffFrame.current)},[]);
  const selectionStart=useSharedValue<Sample|null>(null);
  const downTime=useSharedValue(0),startX=useSharedValue(0),startY=useSharedValue(0);
@@ -380,14 +394,14 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(draggingSelection.value){
    const dx=dragX.value,dy=dragY.value;
    draggingSelection.value=false;
-   if(!blocked.value&&Math.hypot(dx,dy)>0.1){dragPending.value=true;runOnJS(commitSelectionMove)(dx,dy);}
+   if(!blocked.value&&Math.hypot(dx,dy)>0.1){runOnJS(commitSelectionMove)(dx,dy);}
    else {dragX.value=0;dragY.value=0;}
    drawing.value=false;
    runOnJS(notify)(false);return;
   }
   if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;cursorOn.value=false;runOnJS(notify)(false);
- }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false;cornerActive.value=false;if(!dragPending.value){dragX.value=0;dragY.value=0;}}).runOnJS(false);
+ }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false;cornerActive.value=false;if(!dragPending.value&&!draggingSelection.value){/* Keep the last pose until the JS handoff mounts. */}}).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(e=>{
   if(tool==='select'&&selectionBoundsValue.value){
    blocked.value=true;samples.value=[];draft.value='';drawing.value=false;
