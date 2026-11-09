@@ -27,6 +27,7 @@ export default function NoteCanvasScreen(){
  const notebook=useNotebookStore(s=>s.notebooks.find(n=>n.id===id));
  const pages=usePageStore(s=>s.pages),load=usePageStore(s=>s.load),add=usePageStore(s=>s.add),remove=usePageStore(s=>s.remove),move=usePageStore(s=>s.move),changeTemplate=usePageStore(s=>s.updateTemplate);
  const [selectedId,setSelectedId]=useState<string|null>(null),[tool,setTool]=useState<Tool>('pen'),[brush,setBrush]=useState<Brush>({color:'#1B1B2F',width:5,opacity:1});
+ const [templatePageId,setTemplatePageId]=useState<string|null>(null);
  const [moreOpen,setMoreOpen]=useState(false);const [panel,setPanel]=useState<'tool'|'palette'|null>(null),[sheet,setSheet]=useState(false),[focus,setFocus]=useState(false),[eraserSize,setEraserSize]=useState(24),[eraserMode,setEraserMode]=useState<'pixel'|'stroke'>('pixel');
  const [controller,setController]=useState<CanvasController|null>(null);
  const [shapeKind,setShapeKind]=useState<ShapeMode>('auto'),[shapeFill,setShapeFill]=useState(false),[ruler,setRuler]=useState(false);
@@ -41,7 +42,7 @@ export default function NoteCanvasScreen(){
  const select=(pageId:string)=>{if(pageId===selected?.id)return;void controllerRef.current?.flush();setSelectedId(pageId);setController(null);setPanel(null);setSheet(false)};
  const addPage=async()=>{await controllerRef.current?.flush();const count=pages.length;await add(index);const next=usePageStore.getState().pages;if(next.length>count)select(next[Math.min(index+1,next.length-1)].id)};
  const askRemove=(pageId:string)=>{if(pages.length<=1){Alert.alert('Son sayfa','Defterin son sayfası silinemez.');return}Alert.alert('Sayfayı sil','Bu sayfa silinsin mi?',[{text:'Vazgeç',style:'cancel'},{text:'Sil',style:'destructive',onPress:async()=>{await controllerRef.current?.flush();await remove(pageId);const next=usePageStore.getState().pages;if(pageId===selected?.id&&next.length)setSelectedId(next[Math.min(index,next.length-1)].id)}}])};
- const chooseTemplate=(pageId:string)=>Alert.alert('Sayfa şablonu','Yeni şablonu seç',templates.map(t=>({text:t,onPress:()=>{const p=pages.find(x=>x.id===pageId);if(p)void changeTemplate(pageId,t,p.paperColor)}})).concat([{text:'Vazgeç' as PageTemplate,onPress:()=>{}}]));
+ const chooseTemplate=(pageId:string)=>{setTemplatePageId(pageId);};
  const pageActions=(pageId:string)=>Alert.alert('Sayfa işlemleri','İşlem seç',[{text:'Şablon',onPress:()=>chooseTemplate(pageId)},{text:'Yukarı taşı',onPress:()=>void move(pageId,Math.max(0,pages.findIndex(p=>p.id===pageId)-1))},{text:'Aşağı taşı',onPress:()=>void move(pageId,Math.min(pages.length-1,pages.findIndex(p=>p.id===pageId)+1))},{text:'Sil',style:'destructive',onPress:()=>askRemove(pageId)},{text:'Vazgeç',style:'cancel'}]);
  const more=()=>{setPanel(null);setMoreOpen(true);};
  const moreItems=[
@@ -94,6 +95,23 @@ export default function NoteCanvasScreen(){
  {popover}
  </View>
  <Modal visible={sheet} transparent animationType="slide" onRequestClose={()=>setSheet(false)}><View style={{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay}}><View style={{backgroundColor:colors.surfaceRaised,borderTopLeftRadius:24,borderTopRightRadius:24,paddingBottom:28,maxHeight:height*0.65}}><View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingHorizontal:16,paddingTop:12}}><Text style={{fontFamily:fonts.heading,fontSize:20,color:ink}}>Sayfalar</Text>{control('Kapat',X,()=>setSheet(false))}</View><CanvasPageStrip tablet={false} pages={pages} selectedId={selected?.id} colors={colors} onSelect={select} onAdd={()=>void addPage()} onRemove={askRemove} onMove={(p,i)=>void move(p,i)} onActions={pageActions}/></View></View></Modal>
+ <Modal visible={templatePageId!==null} transparent animationType="fade" onRequestClose={()=>setTemplatePageId(null)}>
+ <View style={{flex:1,justifyContent:'center',paddingHorizontal:20,backgroundColor:colors.overlay}}>
+ <Pressable accessibilityRole="button" accessibilityLabel="Şablon seçimini kapat" onPress={()=>setTemplatePageId(null)} style={{position:'absolute',top:0,bottom:0,left:0,right:0}}/>
+ <View style={{backgroundColor:colors.surfaceRaised,borderRadius:24,padding:20,maxWidth:520,width:'100%',alignSelf:'center',gap:16}}>
+ <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}>
+ <View style={{gap:4,flex:1}}><Text style={{fontFamily:fonts.heading,fontSize:21,color:ink}}>Sayfa şablonu</Text><Text style={{fontFamily:fonts.body,fontSize:13,color:muted}}>Sayfan için bir görünüm seç</Text></View>
+ <Pressable accessibilityRole="button" accessibilityLabel="Kapat" onPress={()=>setTemplatePageId(null)} style={{width:44,height:44,alignItems:'center',justifyContent:'center'}}><X size={22} color={ink}/></Pressable>
+ </View>
+ <View style={{flexDirection:'row',flexWrap:'wrap',gap:12}}>
+ {templates.map(t=>{const active=pages.find(p=>p.id===templatePageId)?.template===t;return <Pressable key={t} accessibilityRole="button" accessibilityLabel={t+' sayfa şablonu'} accessibilityState={{selected:active}} onPress={()=>{const page=pages.find(p=>p.id===templatePageId);setTemplatePageId(null);if(page)void changeTemplate(page.id,t,page.paperColor)}} style={{width:'47%',flexGrow:1,gap:9,padding:10,borderRadius:16,borderWidth:active?2:1,borderColor:active?colors.accent:colors.divider,backgroundColor:active?colors.accent+'10':colors.surface}}>
+ <View style={{height:112,backgroundColor:'#FFFFFF',borderRadius:9,borderWidth:1,borderColor:'#E5E6EB',overflow:'hidden',paddingHorizontal:12,paddingVertical:10,justifyContent:'space-evenly'}}>
+ {t==='boş'?<View style={{flex:1,alignItems:'center',justifyContent:'center'}}><View style={{width:35,height:2,backgroundColor:'#E7E9EF',borderRadius:2}}/></View>:t==='çizgili'?Array.from({length:7},(_,i)=><View key={i} style={{height:1,backgroundColor:'#D5DDF1'}}/>):t==='kareli'?<View style={{flex:1,justifyContent:'space-evenly'}}>{Array.from({length:7},(_,i)=><View key={i} style={{height:1,backgroundColor:'#D5DDF1'}}/>)}<View pointerEvents="none" style={{position:'absolute',top:0,bottom:0,left:0,right:0,flexDirection:'row',justifyContent:'space-evenly'}}>{Array.from({length:8},(_,i)=><View key={i} style={{width:1,backgroundColor:'#D5DDF1'}}/>)}</View></View>:<View style={{flex:1,justifyContent:'space-evenly'}}>{Array.from({length:6},(_,i)=><View key={i} style={{flexDirection:'row',justifyContent:'space-evenly'}}>{Array.from({length:7},(_,j)=><View key={j} style={{width:3,height:3,borderRadius:2,backgroundColor:'#B7C4E4'}}/>)}</View>)}</View>}
+ </View>
+ <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}><Text style={{fontFamily:fonts.semibold,fontSize:15,color:ink,textTransform:'capitalize'}}>{t}</Text>{active&&<Text style={{color:colors.accent,fontSize:12,fontFamily:fonts.semibold}}>Seçili ✓</Text>}</View>
+ </Pressable>})}
+ </View>
+ </View></View></Modal>
  <Modal visible={moreOpen} transparent animationType="fade" onRequestClose={()=>setMoreOpen(false)}>
  <View style={{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay}}>
  <Pressable accessibilityRole="button" accessibilityLabel="Menüyü kapat" onPress={()=>setMoreOpen(false)} style={{position:'absolute',top:0,left:0,right:0,bottom:0}}/>
