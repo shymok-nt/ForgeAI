@@ -43,6 +43,19 @@ const previewShape=(kind:string,x0:number,y0:number,x1:number,y1:number):string=
  if(rx<1||ry<1)return '';
  return 'M '+(cx+rx)+' '+cy+' A '+rx+' '+ry+' 0 1 0 '+(cx-rx)+' '+cy+' A '+rx+' '+ry+' 0 1 0 '+(cx+rx)+' '+cy+' Z';
 };
+// For a single shape, the selection frame follows its local axes rather
+// than the axis-aligned bounding box of the rotated geometry.
+const selectionFrame=(elements:Element[]):{bounds:readonly [number,number,number,number];rotation:number}|null=>{
+ if(!elements.length)return null;
+ if(elements.length===1&&elements[0].type==='shape'){
+  const p=elements[0].params;
+  return {bounds:[Math.min(p.x,p.x+p.w),Math.min(p.y,p.y+p.h),Math.max(p.x,p.x+p.w),Math.max(p.y,p.y+p.h)],rotation:p.rotation};
+ }
+ return {bounds:[
+  Math.min(...elements.map(e=>e.bbox[0])),Math.min(...elements.map(e=>e.bbox[1])),
+  Math.max(...elements.map(e=>e.bbox[2])),Math.max(...elements.map(e=>e.bbox[3]))
+ ],rotation:0};
+};
 const pathCache=new Map<string,{element:Element;path:ReturnType<typeof strokePath>}>();
 const cachedPath=(element:Element)=>{
  const hit=pathCache.get(element.id);
@@ -129,7 +142,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const gestureScale=useSharedValue(1),gestureAngle=useSharedValue(0);
  const gestureDX=useSharedValue(0),gestureDY=useSharedValue(0);
  const transformActive=useSharedValue(false),transformPending=useSharedValue(false);
- const [handoff,setHandoff]=useState<{elements:Element[];bounds:readonly [number,number,number,number];dx:number;dy:number;scale:number;angle:number}|null>(null);
+ const [handoff,setHandoff]=useState<{elements:Element[];bounds:readonly [number,number,number,number];rotation:number;dx:number;dy:number;scale:number;angle:number}|null>(null);
  const pendingHandoff=useRef(false);
  const handoffFrame=useRef<number|null>(null);
  const rotateActive=useSharedValue(false),pinchActive=useSharedValue(false);
@@ -137,10 +150,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const gestureCenterX=useSharedValue(0),gestureCenterY=useSharedValue(0);
 
  const selectedElements=useMemo(()=>content.elements.filter(e=>selectedIds.includes(e.id)),[content,selectedIds]);
- const selectedBounds=useMemo(()=>{
-  if(!selectedElements.length)return null;
-  return [Math.min(...selectedElements.map(e=>e.bbox[0])),Math.min(...selectedElements.map(e=>e.bbox[1])),Math.max(...selectedElements.map(e=>e.bbox[2])),Math.max(...selectedElements.map(e=>e.bbox[3]))] as const;
- },[selectedElements]);
+ const selectedFrame=useMemo(()=>selectionFrame(selectedElements),[selectedElements]);
+ const selectedBounds=selectedFrame?.bounds??null;
+ const selectedRotation=selectedFrame?.rotation??0;
+ const selectedRotationValue=useSharedValue(0);
+ useEffect(()=>{selectedRotationValue.value=selectedRotation;},[selectedRotation]);
  const selectionBoundsValue=useSharedValue<readonly [number,number,number,number]|null>(null);
  useEffect(()=>{selectionBoundsValue.value=selectedBounds;},[selectedBounds]);
  const dragTransform=useDerivedValue(()=>[{translateX:dragX.value},{translateY:dragY.value}]);
@@ -166,7 +180,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const b=selectedBounds;
   if(!b)return;
   pendingHandoff.current=true;
-  setHandoff({elements:selectedElements,bounds:b,dx,dy,scale:1,angle:0});
+  setHandoff({elements:selectedElements,bounds:b,rotation:selectedRotation,dx,dy,scale:1,angle:0});
   onChange(withHeight(content.elements.map(e=>ids.has(e.id)?moveElement(e,dx,dy):e)));
  };
  const commitGesture=(dx:number,dy:number,scale:number,angle:number)=>{
@@ -196,7 +210,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   // Keep the last visible pose until the persisted geometry is ready.
   if(handoffFrame.current!==null){cancelAnimationFrame(handoffFrame.current);handoffFrame.current=null;}
   pendingHandoff.current=true;
-  setHandoff({elements:selectedElements,bounds:b,dx,dy,scale,angle});
+  setHandoff({elements:selectedElements,bounds:b,rotation:selectedRotation,dx,dy,scale,angle});
   onChange(withHeight(next));
  };
  // The handoff layer must mount before the UI-thread transform is reset.
@@ -323,7 +337,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    }
    if(cornerHit){samples.value=[];drawing.value=false;draft.value='';return;}
    const hitSlop=12/(fitWidth*zoom.value);
-   if(p[0]>=b[0]-hitSlop&&p[0]<=b[2]+hitSlop&&p[1]>=b[1]-hitSlop&&p[1]<=b[3]+hitSlop){
+   const cos=Math.cos(selectedRotationValue.value),sin=Math.sin(selectedRotationValue.value);
+    const localX=cx+(p[0]-cx)*cos+(p[1]-cy)*sin;
+    const localY=cy-(p[0]-cx)*sin+(p[1]-cy)*cos;
+    if(localX>=b[0]-hitSlop&&localX<=b[2]+hitSlop&&localY>=b[1]-hitSlop&&localY<=b[3]+hitSlop){
     draggingSelection.value=true;dragX.value=0;dragY.value=0;
     samples.value=[];drawing.value=false;draft.value='';
     return;
