@@ -385,12 +385,22 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const imageCorner=useSharedValue(false),imageCornerStart=useSharedValue(1),imageCornerX=useSharedValue(0),imageCornerY=useSharedValue(0);
  const imageCommittedX=useSharedValue(0),imageCommittedY=useSharedValue(0),imageCommittedScale=useSharedValue(1),imageCommittedAngle=useSharedValue(0);
  const imageHandoff=useRef(false);
- useEffect(()=>{const i=(content.images??[]).find(x=>x.id===imageId);imageBounds.value=i?[i.x,i.y,i.x+i.width,i.y+i.height]:null},[imageId,content.images]);
+ 
  const imageTransform=useDerivedValue(()=>{const b=imageBounds.value,cx=b?(b[0]+b[2])/2:0,cy=b?(b[1]+b[3])/2:0;return [{translateX:imageCommittedX.value+imageDX.value+imageFocalDX.value},{translateY:imageCommittedY.value+imageDY.value+imageFocalDY.value},{translateX:cx},{translateY:cy},{rotate:imageCommittedAngle.value+imageAngle.value},{scale:imageCommittedScale.value*imageScale.value},{translateX:-cx},{translateY:-cy}]});
  const commitImagePinch=(dx:number,dy:number,scale:number,angle:number)=>{imageHandoff.current=true;const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).map(i=>{if(i.id!==id)return i;const w=Math.max(40,i.width*scale),h=Math.max(40,i.height*scale);return {...i,x:i.x+(i.width-w)/2+dx,y:i.y+(i.height-h)/2+dy,width:w,height:h,rotation:(i.rotation??0)+angle}})})};
  const finishImagePinch=()=>{'worklet';const dx=imageFocalDX.value,dy=imageFocalDY.value,scale=imageScale.value,angle=imageAngle.value;imagePinching.value=false;imageCommittedX.value+=dx;imageCommittedY.value+=dy;imageCommittedScale.value*=scale;imageCommittedAngle.value+=angle;imageFocalDX.value=0;imageFocalDY.value=0;imageScale.value=1;imageAngle.value=0;if(Math.abs(dx)+Math.abs(dy)+Math.abs(scale-1)+Math.abs(angle)>0.0001)runOnJS(commitImagePinch)(dx,dy,scale,angle)};
  const commitImageMove=(dx:number,dy:number)=>{imageHandoff.current=true;const id=imageIdRef.current;if(!id)return;onChange({...content,images:(content.images??[]).map(i=>i.id===id?{...i,x:i.x+dx,y:i.y+dy}:i)})};
- useLayoutEffect(()=>{if(!imageHandoff.current)return;imageHandoff.current=false;imageCommittedX.value=0;imageCommittedY.value=0;imageCommittedScale.value=1;imageCommittedAngle.value=0;},[content.images]);
+ // Update the selection origin and retire the UI-thread preview in the same
+ // layout commit as the persisted image geometry. A later passive effect
+ // would shift the transform origin one frame after the image was repainted.
+ useLayoutEffect(()=>{
+  const i=(content.images??[]).find(x=>x.id===imageId);
+  imageBounds.value=i?[i.x,i.y,i.x+i.width,i.y+i.height]:null;
+  if(!imageHandoff.current)return;
+  imageHandoff.current=false;
+  imageCommittedX.value=0;imageCommittedY.value=0;
+  imageCommittedScale.value=1;imageCommittedAngle.value=0;
+ },[imageId,content.images]);
  const pan=Gesture.Pan().minDistance(0).onTouchesDown(e=>{
   if(e.allTouches.length>1){blocked.value=true;imageDragging.value=false;imageDX.value=0;imageDY.value=0;samples.value=[];draft.value='';drawing.value=false}
  }).onBegin(e=>{
