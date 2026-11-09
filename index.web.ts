@@ -3,7 +3,7 @@ import { LoadSkiaWeb } from '@shopify/react-native-skia/lib/module/web';
 
 // Expo Router eagerly evaluates routes. Initialize CanvasKit first so the
 // drawing screen never mounts a Skia Canvas before the WASM runtime is ready.
-LoadSkiaWeb()
+LoadSkiaWeb({locateFile: (file: string) => `/${file}`})
   .then(async () => {
     const { App } = await import('expo-router/build/qualified-entry');
     const { renderRootComponent } = await import('expo-router/build/renderRootComponent');
@@ -12,5 +12,5 @@ LoadSkiaWeb()
   .catch(error => {
     console.error('CanvasKit web initialization failed:', error);
     const root = document.getElementById('root');
-    if (root) root.textContent = 'Çizim motoru yüklenemedi. Sayfayı yenileyin veya bağlantınızı kontrol edin.';
+    if (root) root.textContent = `Çizim motoru yüklenemedi: ${error instanceof Error ? error.message : String(error)}. public/canvaskit.wasm dosyasının varlığını kontrol edin.`;
   });
