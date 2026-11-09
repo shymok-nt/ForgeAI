@@ -6,18 +6,28 @@ import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement} from '@/features/canvas/types';
 import {makeStroke,strokePath,strokeHit} from '@/features/canvas/engine/geometry';
+import {pixelErase} from '@/features/canvas/engine/pixelEraser';
 import {shapePath,makeShape,lassoSelect,moveElement,scaleElement,rotateElement} from '@/features/canvas/engine/shapes';
 import type {ShapeKind,Element} from '@/features/canvas/types';
 import type {PageTemplate,PaperColor} from '@/types/notebook';
 export type Tool='pen'|'highlighter'|'eraser'|'hand'|'select'|'shape';
 export type Brush={color:string;width:number;opacity:number};
 type Sample=[number,number,number];
-type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;shapeKind?:ShapeKind;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}};
+type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;shapeKind?:ShapeKind;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number}};
+const pathCache=new Map<string,{element:Element;path:ReturnType<typeof strokePath>}>();
+const cachedPath=(element:Element)=>{
+ const hit=pathCache.get(element.id);
+ if(hit?.element===element)return hit.path;
+ const path=element.type==='stroke'?strokePath(element):shapePath(element);
+ pathCache.set(element.id,{element,path});
+ if(pathCache.size>2500){for(const id of Array.from(pathCache.keys()).slice(0,500))pathCache.delete(id)}
+ return path;
+};
 const Completed=memo(function Completed({content,view}:{content:PageContent;view:[number,number,number,number]}){
- const paths=useMemo(()=>content.elements.filter(s=>{const b=s.bbox;return b[2]>=view[0]&&b[0]<=view[2]&&b[3]>=view[1]&&b[1]<=view[3]}).map(s=>({element:s,path:s.type==='stroke'?strokePath(s):shapePath(s)})).sort((a,b)=>((a.element.type==='stroke'&&a.element.tool==='highlighter')?0:1)-((b.element.type==='stroke'&&b.element.tool==='highlighter')?0:1)),[content,view[0],view[1],view[2],view[3]]);
+ const paths=useMemo(()=>content.elements.filter(s=>{const b=s.bbox;return b[2]>=view[0]&&b[0]<=view[2]&&b[3]>=view[1]&&b[1]<=view[3]}).map(s=>({element:s,path:cachedPath(s)})).sort((a,b)=>((a.element.type==='stroke'&&a.element.tool==='highlighter')?0:1)-((b.element.type==='stroke'&&b.element.tool==='highlighter')?0:1)),[content,view[0],view[1],view[2],view[3]]);
  return <>{paths.map(({element,path})=>element.type==='stroke'?<Path key={element.id} path={path} color={element.color} opacity={element.opacity} blendMode={element.tool==='highlighter'?'multiply':'srcOver'}/>:<React.Fragment key={element.id}>{element.fill&&<Path path={path} color={element.fill.color} opacity={element.fill.opacity} style="fill"/>}<Path path={path} color={element.stroke.color} opacity={element.stroke.opacity} style="stroke" strokeWidth={element.stroke.width}/></React.Fragment>)}</>;
 });
-export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,onChange,onDrawingActive,shapeKind='rect',shapeFill=false,onSelectionChange,selectionAction}:Props){
+export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='rect',shapeFill=false,onSelectionChange,selectionAction}:Props){
  const [selectedIds,setSelectedIds]=useState<string[]>([]);
  const selectedRef=useRef<string[]>([]);selectedRef.current=selectedIds;
  useEffect(()=>{if(!selectionAction)return;const ids=new Set(selectedRef.current);if(!ids.size)return;let next:Element[]=content.elements;
@@ -34,6 +44,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const fitAll=Math.max(0.01,Math.min(fitWidth,(size.height-4)/PAGE_HEIGHT));
  const minZoom=Math.max(0.1,fitAll/fitWidth*0.8);
  const zoom=useSharedValue(1),offsetX=useSharedValue(0),offsetY=useSharedValue(0);
+ const awaitingCommit=useSharedValue(false);
  const draft=useSharedValue(''),baseZoom=useSharedValue(1),baseX=useSharedValue(0),baseY=useSharedValue(0);
  const samples=useSharedValue<Sample[]>([]),blocked=useSharedValue(false),drawing=useSharedValue(false);
  const selectionStart=useSharedValue<Sample|null>(null);
@@ -62,11 +73,13 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const shape=makeShape(shapeKind,first[0],first[1],w,h,brush.color,brush.width,brush.opacity,shapeFill);shape.z=content.elements.length;
   onChange({v:2,elements:[...content.elements,shape]});return;
  }
- if(tool==='eraser'){const hits=new Set<string>();for(const p of points)for(const s of content.elements)if(s.type==='stroke'?strokeHit(s,p[0],p[1],eraserSize):(p[0]>=s.bbox[0]-eraserSize&&p[0]<=s.bbox[2]+eraserSize&&p[1]>=s.bbox[1]-eraserSize&&p[1]<=s.bbox[3]+eraserSize))hits.add(s.id);if(hits.size)onChange({v:2,elements:content.elements.filter(s=>!hits.has(s.id))});return}
+ if(tool==='eraser'){const next=pixelErase(content.elements,points,eraserSize/2,eraserMode==='stroke');if(next!==content.elements)onChange({v:2,elements:next});return}
   const stroke=makeStroke(points,{tool:tool==='highlighter'?'highlighter':'pen',...brush},Crypto.randomUUID(),content.elements.length);
   onChange({v:2,elements:[...content.elements,stroke]});
  };
  const notify=(active:boolean)=>onDrawingActive?.(active);
+ const complete=(points:Sample[])=>{endStroke(points);};
+ useEffect(()=>{if(awaitingCommit.value){requestAnimationFrame(()=>{draft.value='';awaitingCommit.value=false})}},[content]);
  const pan=Gesture.Pan().minDistance(0).onTouchesDown(e=>{
   if(e.allTouches.length>1){blocked.value=true;samples.value=[];draft.value='';drawing.value=false}
  }).onBegin(e=>{
@@ -86,8 +99,8 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const pts=samples.value;
   draft.value=pts.map((v,i)=>`${i===0?'M':'L'}${v[0]} ${v[1]}`).join(' ');
  }).onEnd(()=>{
-  if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){runOnJS(endStroke)(samples.value)}
-  samples.value=[];draft.value='';drawing.value=false;runOnJS(notify)(false);
+  if(!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
+  samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;runOnJS(notify)(false);
  }).onFinalize(()=>{samples.value=[];draft.value='';drawing.value=false;blocked.value=false}).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(()=>{blocked.value=true;samples.value=[];draft.value='';drawing.value=false;baseZoom.value=zoom.value;baseX.value=offsetX.value;baseY.value=offsetY.value}).onUpdate(e=>{
   const z=Math.max(minZoom,Math.min(5,baseZoom.value*e.scale));
