@@ -1,5 +1,6 @@
+import {SafeAreaView} from 'react-native-safe-area-context';
 import { useMemo,useState } from 'react';
-import { Alert,KeyboardAvoidingView,Platform,Pressable,SafeAreaView,ScrollView,StyleSheet,Switch,Text,TextInput,View } from 'react-native';
+import { Alert,KeyboardAvoidingView,Platform,Pressable,ScrollView,StyleSheet,Switch,Text,TextInput,View } from 'react-native';
 import { router,useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Image as ImageIcon,RotateCcw } from 'lucide-react-native';
