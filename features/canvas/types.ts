@@ -1,7 +1,10 @@
 export const PAGE_WIDTH=1000;
 export const PAGE_HEIGHT=1414;
 export type Point=[number,number,number];
-export type StrokeElement={id:string;type:'stroke';z:number;createdAt:string;tool:'pen'|'highlighter';color:string;width:number;opacity:number;points:number[];bbox:[number,number,number,number]};
-export type Element=StrokeElement;
+export type Bounds=[number,number,number,number];
+export type StrokeElement={id:string;type:'stroke';z:number;createdAt:string;tool:'pen'|'highlighter';color:string;width:number;opacity:number;points:number[];bbox:Bounds};
+export type ShapeKind='line'|'arrow'|'rect'|'ellipse'|'triangle'|'polygon';
+export type ShapeElement={id:string;type:'shape';z:number;createdAt:string;kind:ShapeKind;params:{x:number;y:number;w:number;h:number;rotation:number;points?:number[]};stroke:{color:string;width:number;opacity:number};fill:null|{color:string;opacity:number};bbox:Bounds};
+export type Element=StrokeElement|ShapeElement;
 export type PageContent={v:2;elements:Element[]};
 export const emptyContent=():PageContent=>({v:2,elements:[]});
