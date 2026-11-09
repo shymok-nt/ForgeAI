@@ -395,19 +395,21 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    const tangent=(-startY*dx+startX*dy)/cornerStartRadius.value;
    const radial=(startX*dx+startY*dy)/cornerStartRadius.value;
    // Decide the gesture after a small screen-space movement, without an 8px dead zone.
-   if(cornerMode.value===0&&Math.hypot(dx,dy)>3/(fitWidth*zoom.value))
+   if(cornerMode.value===0&&Math.hypot(dx,dy)>2/(fitWidth*zoom.value))
     cornerMode.value=Math.abs(tangent)>Math.abs(radial)*1.25?2:1;
    if(cornerMode.value===1){
     // Relative projection ensures scale starts at exactly 1 under the pointer.
     gestureScale.value=Math.max(0.15,Math.min(8,1+radial/cornerStartRadius.value));
     gestureAngle.value=0;
    }else if(cornerMode.value===2){
+    // Measure against the initial pointer angle, not the handle center.
+    // This prevents the first-frame jump when grabbing off-center.
+    const startAngle=Math.atan2(cornerStartPageY.value-cy,cornerStartPageX.value-cx);
     const angle=Math.atan2(p[1]-cy,p[0]-cx);
-    let delta=angle-cornerLastAngle.value;
+    let delta=angle-startAngle;
     if(delta>Math.PI)delta-=2*Math.PI;
     if(delta<-Math.PI)delta+=2*Math.PI;
-    cornerAccumAngle.value+=delta;cornerLastAngle.value=angle;
-    gestureAngle.value=cornerAccumAngle.value;gestureScale.value=1;
+    gestureAngle.value=delta;gestureScale.value=1;
    }
    return;
   }
