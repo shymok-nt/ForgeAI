@@ -67,7 +67,7 @@ export default function NoteCanvasScreen(){
  </View>}
  <View style={{flex:1,flexDirection:'row'}}>
  {tablet&&!focus&&<View style={{width:132,backgroundColor:colors.background,borderRightWidth:1,borderRightColor:colors.divider}}><CanvasPageStrip tablet pages={pages} selectedId={selected?.id} colors={colors} onSelect={select} onAdd={()=>void addPage()} onRemove={askRemove} onMove={(p,i)=>void move(p,i)} onActions={pageActions}/></View>}
- <View style={{flex:1,marginHorizontal:12,marginTop:12,marginBottom:tablet?12:100,shadowColor:'#000',shadowOpacity:0.12,shadowRadius:8,elevation:3,borderRadius:6,overflow:'hidden'}}>
+ <View style={{flex:1,marginHorizontal:0,marginTop:0,marginBottom:0,borderRadius:0,overflow:'hidden'}}>
  {selected?<CanvasPage key={selected.id} page={selected} tool={tool} brush={brush} eraserSize={eraserSize} eraserMode={eraserMode} onController={setController} onHistory={()=>setHistoryVersion(v=>v+1)} onDrawStart={()=>setPanel(null)} shapeKind={shapeKind} shapeFill={shapeFill} onSelectionChange={setSelectedElements} selectionAction={selectionAction}/>:<Text style={{color:ink}}>Sayfalar yükleniyor…</Text>}
  </View>
  <View pointerEvents="none" style={{position:'absolute',bottom:tablet?22:110,right:24,backgroundColor:'#1B1B2FBB',borderRadius:20,paddingHorizontal:12,paddingVertical:7}}><Text style={{color:'#FFFFFF',fontSize:12}}>{index+1} / {pages.length}</Text></View>
