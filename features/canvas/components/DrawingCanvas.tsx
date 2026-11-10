@@ -111,20 +111,20 @@ const InlineTextEditor=memo(function InlineTextEditor({item,left,top,scale,onCom
    drag.setValue({x:0,y:0});
   }
  },[item.x,item.y,drag]);
- const hold=useMemo(()=>Gesture.Pan().activateAfterLongPress(350).minDistance(0)
+ const hold=useMemo(()=>Gesture.Pan().minPointers(2).maxPointers(2).minDistance(0)
   .onStart(()=>{dragCommitted.current=false;drag.setValue({x:0,y:0})})
   .onUpdate(e=>{drag.setValue({x:e.translationX,y:e.translationY})})
   .onEnd(e=>{dragCommitted.current=true;moveRef.current(e.translationX,e.translationY)})
   .onFinalize(()=>{if(!dragCommitted.current)drag.setValue({x:0,y:0})})
   .runOnJS(true),[drag]);
- const tap=useMemo(()=>Gesture.Tap().maxDuration(250).maxDistance(12).onEnd(()=>setTyping(true)).runOnJS(true),[]);
- const textGesture=useMemo(()=>Gesture.Exclusive(hold,tap),[hold,tap]);
+ const tap=useMemo(()=>Gesture.Tap().maxDuration(250).maxDistance(12).numberOfTaps(1).onEnd(()=>setTyping(true)).runOnJS(true),[]);
+ const textGesture=useMemo(()=>Gesture.Simultaneous(hold,tap),[hold,tap]);
  useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{commit();return true});return()=>sub.remove()},[]);
  const lineHeight=item.fontSize*1.3*scale;
  const minHeight=Math.max(48,lineHeight*3+8);
  const longest=Math.max(0,...value.split('\n').map(line=>line.length));
  const width=Math.max(72,item.w*scale,Math.min((PAGE_WIDTH-item.x)*scale,longest*item.fontSize*scale*0.58+16));
- return <GestureDetector gesture={textGesture}><Animated.View style={{position:'absolute',left,top,width,minHeight:Math.max(minHeight,measuredHeight+8),borderWidth:1,borderColor:'#4385DC',borderRadius:6,backgroundColor:'transparent',transform:drag.getTranslateTransform()}}>
+ return <GestureDetector gesture={textGesture}><Animated.View style={{position:'absolute',left,top,width,minHeight:Math.max(minHeight,measuredHeight+8),borderWidth:1,borderColor:'#90959E',borderRadius:0,backgroundColor:'transparent',transform:drag.getTranslateTransform()}}>
   {typing?<TextInput multiline autoFocus scrollEnabled={false} value={value} onChangeText={next=>{setValue(next);onValueChange(next)}} onContentSizeChange={e=>setMeasuredHeight(e.nativeEvent.contentSize.height)} onBlur={()=>setTyping(false)} underlineColorAndroid="transparent" style={{width:'100%',minHeight:Math.max(minHeight-4,measuredHeight),fontSize:item.fontSize*scale,lineHeight,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align,color:item.color,backgroundColor:'transparent',padding:0,paddingHorizontal:3,textAlignVertical:'top'}}/>:
    <Text style={{minHeight:minHeight-4,paddingHorizontal:3,fontSize:item.fontSize*scale,lineHeight,color:item.color,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align}}>{value}</Text>}
  </Animated.View></GestureDetector>;
