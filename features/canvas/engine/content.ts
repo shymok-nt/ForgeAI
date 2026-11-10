@@ -17,7 +17,7 @@ export function parseContent(raw:string):PageContent{
  const beautifications=Array.isArray(obj.beautifications)?obj.beautifications.filter((value):value is import('@/features/canvas/types').Beautification=>{
  if(!value||typeof value!=='object')return false;
  const b=value as Record<string,unknown>;
- return Array.isArray(b.sourceIds)&&b.sourceIds.every(id=>typeof id==='string')&&Array.isArray(b.words)&&b.words.every(word=>{if(!word||typeof word!=='object')return false;const w=word as Record<string,unknown>;return typeof w.id==='string'&&typeof w.text==='string'&&w.text.length<=10000&&Array.isArray(w.bbox)&&w.bbox.length===4&&w.bbox.every(n=>typeof n==='number'&&Number.isFinite(n))&&typeof w.baseline==='number'&&Number.isFinite(w.baseline)&&typeof w.fontSize==='number'&&w.fontSize>0&&w.fontSize<=200&&typeof w.color==='string'&&(w.font==='Inter'||w.font==='InterBold')})&&(b.mode==='original'||b.mode==='beautified');
+ return Array.isArray(b.sourceIds)&&b.sourceIds.every(id=>typeof id==='string')&&Array.isArray(b.words)&&b.words.every(word=>{if(!word||typeof word!=='object')return false;const w=word as Record<string,unknown>;return typeof w.id==='string'&&typeof w.text==='string'&&w.text.length<=10000&&Array.isArray(w.bbox)&&w.bbox.length===4&&w.bbox.every(n=>typeof n==='number'&&Number.isFinite(n))&&typeof w.baseline==='number'&&Number.isFinite(w.baseline)&&typeof w.fontSize==='number'&&w.fontSize>0&&w.fontSize<=200&&typeof w.color==='string'&&(['Inter','InterBold','Caveat','PatrickHand','DancingScript','Kalam'] as unknown[]).includes(w.font)})&&(b.mode==='original'||b.mode==='beautified');
  }):[];
  return {...(h===undefined?{v:2 as const,elements,images}:{v:2 as const,elements,images,h}),beautifications};
  }catch{return emptyContent()}
