@@ -1,9 +1,11 @@
+
 {
   "expo": {
     "name": "Notex",
     "slug": "notex",
     "scheme": "notex",
     "version": "1.0.0",
+    "icon": "./assets/images/icon.png",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "plugins": [
@@ -14,11 +16,14 @@
       "typedRoutes": true
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "icon": "./assets/images/icon.png"
     },
     "android": {
+      "icon": "./assets/images/icon.png",
       "adaptiveIcon": {
-        "backgroundColor": "#F7F8FC"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#FFDA44"
       }
     }
   }
