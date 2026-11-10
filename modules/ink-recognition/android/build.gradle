@@ -1,0 +1,15 @@
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'expo-module-gradle-plugin'
+
+group = 'com.notex.inkrecognition'
+version = '1.0.0'
+
+android {
+  namespace 'com.notex.inkrecognition'
+  defaultConfig { minSdkVersion 23 }
+}
+
+dependencies {
+  implementation 'com.google.mlkit:digital-ink-recognition:18.1.0'
+}
