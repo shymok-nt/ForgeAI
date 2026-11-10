@@ -89,7 +89,10 @@ export async function importBackup(bytes:Uint8Array,progress:Progress){
    const parsed=JSON.parse(p.content) as {images?:{uri?:string}[]};
    for(const img of parsed.images??[])if(typeof img.uri==='string'&&!img.uri.startsWith('data:'))paths.add(img.uri);
   }
-  const dir=new Directory(Paths.document,'covers');dir.create({idempotent:true,intermediates:true});
+  // On web, expo-file-system's Directory.create may call an unavailable validatePath native method.
+  // Do not enter a database transaction or create partial records until file storage is supported.
+  if(Platform.OS==='web'&&paths.size>0)throw new Error('Web üzerinde görsel dosyalarını güvenli biçimde geri yükleme henüz desteklenmiyor. Veriler değiştirilmedi.');
+  if(paths.size>0){const dir=new Directory(Paths.document,'covers');dir.create({idempotent:true,intermediates:true});}
   let i=0;for(const path of paths){
    if(!safePath(path))throw Error('invalid path');
    const entry=zip.file('files/'+path);if(!entry)throw Error('missing image');
@@ -119,6 +122,7 @@ export async function importBackup(bytes:Uint8Array,progress:Progress){
   progress('Geri yükleme tamamlandı',100);
  }catch(error){
   for(const path of created){try{const f=new File(Paths.document,path);if(f.exists)f.delete()}catch(e){console.warn('Geri alma dosya temizliği başarısız',e)}}
+  if(error instanceof Error&&error.message.startsWith('Web üzerinde'))throw error;
   throw new Error('Bu dosya okunamadı veya geri yüklenemedi: '+String(error));
  }
 }
