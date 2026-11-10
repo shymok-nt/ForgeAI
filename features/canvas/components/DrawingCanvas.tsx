@@ -91,6 +91,14 @@ const StaticPaper=memo(function StaticPaper({template,paperColor,pageHeight,fitW
   {dots.map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={lineW*1.2} color="#C4CCDD"/>)}
  </>;
 });
+const InlineTextEditor=memo(function InlineTextEditor({item,left,top,scale,onCommit}:{item:TextElement;left:number;top:number;scale:number;onCommit:(value:string)=>void}){
+ const [value,setValue]=useState(item.text);
+ const valueRef=useRef(value);valueRef.current=value;
+ const done=useRef(false);
+ const commit=()=>{if(done.current)return;done.current=true;onCommit(valueRef.current)};
+ useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{commit();return true});return()=>sub.remove()},[]);
+ return <TextInput multiline autoFocus value={value} onChangeText={setValue} onBlur={commit} style={{position:'absolute',left,top,width:item.w*scale,minHeight:item.fontSize*1.5*scale,fontSize:item.fontSize*scale,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align,color:item.color,backgroundColor:'#FFFFFFEE',padding:0,textAlignVertical:'top'}}/>;
+});
 const textLayoutCache=new Map<string,{paragraph:ReturnType<ReturnType<typeof Skia.ParagraphBuilder.Make>['build']>;height:number}>();
 const TextLayer=memo(function TextLayer({element,fonts}:{element:TextElement;fonts:ReturnType<typeof useFonts>}){
  const key=[element.id,element.text,element.fontSize,element.w,element.bold,element.align,element.color].join('|');
@@ -143,13 +151,14 @@ const Completed=memo(function Completed({content,hiddenIds,fonts}:{content:PageC
 export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false,onImageSelectionChange,imageAction,textStyle={fontSize:48,color:'#1B1B2F',bold:false,align:'left'}}:Props){
  const interFonts=useFonts({Inter:require('@expo-google-fonts/inter/Inter_400Regular.ttf'),InterBold:require('@expo-google-fonts/inter/Inter_700Bold.ttf')});
  const [editing,setEditing]=useState<TextElement|null>(null);
- const [draftText,setDraftText]=useState('');
+
  const editingRef=useRef<TextElement|null>(null);
- const draftTextRef=useRef('');
+
+ const editValueRef=useRef('');
  const finishText=()=>{
   const current=editingRef.current;if(!current)return;
   editingRef.current=null;setEditing(null);
-  const value=draftTextRef.current;
+  const value=editValueRef.current;
   const lines=value.split('\n');
   const charsPerLine=Math.max(1,Math.floor(current.w/(current.fontSize*0.55)));
   const lineCount=lines.reduce((n,line)=>n+Math.max(1,Math.ceil(line.length/charsPerLine)),0);
@@ -164,7 +173,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const beginText=(x:number,y:number)=>{
   const hit=[...content.elements].reverse().find(e=>e.type==='text'&&x>=e.bbox[0]&&x<=e.bbox[2]&&y>=e.bbox[1]&&y<=e.bbox[3]) as TextElement|undefined;
   const current=hit??{id:Crypto.randomUUID(),type:'text' as const,z:content.elements.length,createdAt:new Date().toISOString(),x,y,w:Math.max(120,Math.min(560,PAGE_WIDTH-x)),text:'',fontSize:textStyle.fontSize,color:textStyle.color,bold:textStyle.bold,align:textStyle.align,bbox:[x,y,x+Math.max(120,Math.min(560,PAGE_WIDTH-x)),y+textStyle.fontSize*1.25] as [number,number,number,number]};
-  editingRef.current=current;draftTextRef.current=current.text;setDraftText(current.text);setEditing(current);
+  editingRef.current=current;editValueRef.current=current.text;setEditing(current);
  };
  const penSettings=useSettingsStore(state=>state.penSettings);
  const [selectedIds,setSelectedIds]=useState<string[]>([]);
