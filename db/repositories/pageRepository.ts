@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import {File,Paths} from 'expo-file-system';
+import {Directory,File,Paths} from 'expo-file-system';
 import {deleteCoverFile} from '@/utils/files';
 import { getDatabase,withSafeTransaction } from '@/db/database';
 import type { Page } from '@/types/page';
@@ -52,7 +52,7 @@ export const pageRepository={
    const extension=source.extension||'.png';
    const path='page-assets/'+Crypto.randomUUID()+extension;
    const dest=new File(Paths.document,path);
-   dest.parent.create({idempotent:true,intermediates:true});
+   new Directory(Paths.document,'page-assets').create({idempotent:true,intermediates:true});
    source.copy(dest);copiedPaths.push(path);
    return path;
   };
