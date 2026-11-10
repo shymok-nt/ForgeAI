@@ -8,7 +8,7 @@ import { useNotebookStore } from '@/store/notebookStore';
 export function FolderChips({value,onChange,includeAll=true}:{value:FolderFilter;onChange:(value:FolderFilter)=>void;includeAll?:boolean}){
  const {colors,scheme}=useTheme();
  const styles=makeStyles(colors,scheme);
- const available=useNotebookStore(s=>s.folders).map(f=>f.name as FolderFilter);
+ const available=Array.from(new Set(useNotebookStore(s=>s.folders).map(f=>f.name as FolderFilter))).filter(name=>name!=='Tümü'&&name!=='Klasörsüz');
  const folders:FolderFilter[]=includeAll?['Tümü',...available,'Klasörsüz']:['Klasörsüz',...available];
  return <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.row}>
   {folders.map(folder=><Pressable key={folder} accessibilityRole="button" accessibilityLabel={`${folder} klasörü`} accessibilityState={{selected:value===folder}} onPress={()=>onChange(folder)} style={[styles.chip,value===folder&&styles.active]}><Text style={[styles.text,value===folder&&styles.activeText]}>{folder}</Text></Pressable>)}
