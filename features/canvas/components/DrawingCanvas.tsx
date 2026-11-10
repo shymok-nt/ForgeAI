@@ -1,5 +1,5 @@
 import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
-import {View,PixelRatio,Platform,TextInput,BackHandler,type LayoutChangeEvent} from 'react-native';
+import {View,PixelRatio,Platform,TextInput,BackHandler,Keyboard,type LayoutChangeEvent} from 'react-native';
 import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,Skia,vec,Paragraph,useFonts} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector,PointerType} from 'react-native-gesture-handler';
 import {useSettingsStore} from '@/store/settingsStore';
@@ -209,6 +209,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const fitAll=Math.max(0.01,Math.min(fitWidth,size.height/pageHeight));
  const minZoom=1;
  const zoom=useSharedValue(1),offsetX=useSharedValue(0),offsetY=useSharedValue(0);
+ useEffect(()=>{const adjust=(event:{endCoordinates:{height:number}})=>{const item=editingRef.current;if(!item)return;const scale=fitWidth*zoom.value;const estimatedBottom=offsetY.value+(item.bbox[3]+32)*scale;const visibleBottom=Math.max(80,size.height-event.endCoordinates.height);if(estimatedBottom>visibleBottom)offsetY.value-=estimatedBottom-visibleBottom;};const show=Keyboard.addListener(Platform.OS==='ios'?'keyboardWillShow':'keyboardDidShow',adjust);return()=>show.remove()},[size.height,fitWidth]);
  const awaitingCommit=useSharedValue(false);
  const cursorX=useSharedValue(0),cursorY=useSharedValue(0),cursorOn=useSharedValue(false);
  const eraserWidth=useDerivedValue(()=>eraserSize*1.2/(fitWidth*zoom.value));
