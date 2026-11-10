@@ -1,11 +1,11 @@
 import * as Crypto from 'expo-crypto';
 import { getDatabase,withSafeTransaction } from '@/db/database';
-import { copyCoverFile,deleteCoverFile,resolveCoverUri } from '@/utils/files';
+import { copyCoverFile,deleteCoverFile,resolveCoverUri,coverPathFromUri } from '@/utils/files';
 import type { NotebookDraft,PageTemplate,PaperColor } from '@/types/notebook';
 export type NotebookRow={
  id:string;title:string;folder_id:string|null;cover_type:'color'|'image'|'preset';cover_color:string|null;
  cover_image_path:string|null;cover_preset_id:string|null;show_title_on_cover:number;
- template:PageTemplate;paper_color:PaperColor;favorite:number;created_at:string;updated_at:string;page_count:number;
+ template:PageTemplate;paper_color:PaperColor;favorite:number;created_at:string;updated_at:string;deleted_at:string|null;page_count:number;
 };
 export type NotebookInput=NotebookDraft & {folderId:string|null;coverImagePath:string|null;coverPresetId?:string|null};
 const select=`SELECT n.*,COUNT(p.id) AS page_count FROM notebooks n LEFT JOIN pages p ON p.notebook_id=n.id WHERE n.deleted_at IS NULL`;
@@ -34,14 +34,58 @@ export const notebookRepository={
   }
  },
  async remove(id:string){
-  const db=await getDatabase();const row=await this.getById(id);if(!row)return;
-  // Explicitly remove child pages, including their persisted drawing content.
-  // Some web SQLite implementations do not reliably enforce ON DELETE CASCADE.
+  const db=await getDatabase();
+  await db.runAsync('UPDATE notebooks SET deleted_at=? WHERE id=? AND deleted_at IS NULL',now(),id);
+ },
+ async getDeleted(){
+  const db=await getDatabase();
+  return db.getAllAsync<NotebookRow>('SELECT n.*,COUNT(p.id) AS page_count FROM notebooks n LEFT JOIN pages p ON p.notebook_id=n.id WHERE n.deleted_at IS NOT NULL GROUP BY n.id ORDER BY n.deleted_at DESC');
+ },
+ async countDeleted(){
+  const db=await getDatabase();
+  const result=await db.getFirstAsync<{n:number}>('SELECT COUNT(*) AS n FROM notebooks WHERE deleted_at IS NOT NULL');
+  return result?.n??0;
+ },
+ async restore(id:string){
+  const db=await getDatabase();
+  await db.runAsync(`UPDATE notebooks SET deleted_at=NULL,folder_id=CASE WHEN folder_id IS NULL OR EXISTS(SELECT 1 FROM folders WHERE folders.id=notebooks.folder_id) THEN folder_id ELSE NULL END WHERE id=? AND deleted_at IS NOT NULL`,id);
+ },
+ async permanentlyRemove(id:string){
+  const db=await getDatabase();
+  const row=await db.getFirstAsync<{cover_image_path:string|null}>('SELECT cover_image_path FROM notebooks WHERE id=? AND deleted_at IS NOT NULL',id);
+  if(!row)return;
+  const pages=await db.getAllAsync<{thumbnail_path:string|null;content:string}>('SELECT thumbnail_path,content FROM pages WHERE notebook_id=?',id);
   await withSafeTransaction(db,async tx=>{
    await tx.runAsync('DELETE FROM pages WHERE notebook_id=?',id);
-   await tx.runAsync('DELETE FROM notebooks WHERE id=?',id);
+   await tx.runAsync('DELETE FROM notebooks WHERE id=? AND deleted_at IS NOT NULL',id);
   });
-  if(row.cover_image_path){const used=await db.getFirstAsync<{n:number}>('SELECT COUNT(*) AS n FROM notebooks WHERE cover_image_path=?',row.cover_image_path);if(!used?.n)deleteCoverFile(row.cover_image_path);}
+  const paths=new Set<string>();
+  if(row.cover_image_path)paths.add(row.cover_image_path);
+  for(const page of pages){
+   if(page.thumbnail_path)paths.add(page.thumbnail_path);
+   try{
+    const content=JSON.parse(page.content) as {images?:{uri?:string}[]};
+    for(const image of content.images??[]){
+     if(typeof image.uri==='string'&&!image.uri.startsWith('data:')){
+      const relative=coverPathFromUri(image.uri);
+      if(relative)paths.add(relative);
+     }
+    }
+   }catch(error){console.warn('Sayfa görsel yolları okunamadı',error)}
+  }
+  for(const path of paths){
+   const usedCover=await db.getFirstAsync<{n:number}>('SELECT COUNT(*) AS n FROM notebooks WHERE cover_image_path=?',path);
+   const usedThumbnail=await db.getFirstAsync<{n:number}>('SELECT COUNT(*) AS n FROM pages WHERE thumbnail_path=?',path);
+   if(!usedCover?.n&&!usedThumbnail?.n)deleteCoverFile(path);
+  }
+ },
+ async purgeExpired(){
+  const db=await getDatabase();
+  const cutoff=new Date(Date.now()-30*24*60*60*1000).toISOString();
+  const expired=await db.getAllAsync<{id:string}>('SELECT id FROM notebooks WHERE deleted_at IS NOT NULL AND deleted_at<=?',cutoff);
+  for(const row of expired){
+   try{await this.permanentlyRemove(row.id)}catch(error){console.error('Silinen defter temizlenemedi',row.id,error)}
+  }
  },
  async duplicate(id:string){
   const db=await getDatabase(),original=await this.getById(id);if(!original)throw new Error('Defter bulunamadı');
@@ -55,6 +99,6 @@ export const notebookRepository={
    });return newId;
   }catch(e){deleteCoverFile(newPath);throw e}
  },
- async moveToFolder(id:string,folderId:string|null){const db=await getDatabase();await db.runAsync('UPDATE notebooks SET folder_id=? WHERE id=?',folderId,id)},
- async toggleFavorite(id:string){const db=await getDatabase();await db.runAsync('UPDATE notebooks SET favorite=CASE favorite WHEN 1 THEN 0 ELSE 1 END,updated_at=? WHERE id=?',now(),id);}
+ async moveToFolder(id:string,folderId:string|null){const db=await getDatabase();await db.runAsync('UPDATE notebooks SET folder_id=? WHERE id=? AND deleted_at IS NULL',folderId,id)},
+ async toggleFavorite(id:string){const db=await getDatabase();await db.runAsync('UPDATE notebooks SET favorite=CASE favorite WHEN 1 THEN 0 ELSE 1 END,updated_at=? WHERE id=? AND deleted_at IS NULL',now(),id);}
 };
