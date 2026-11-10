@@ -23,8 +23,12 @@ export default function BackupScreen(){
   if(Platform.OS==='web')webDownload(bytes,name);
   else{
    const file=new File(Paths.cache,name);
-   try{file.write(bytes);if(!await Sharing.isAvailableAsync())throw new Error('Paylaşma bu cihazda kullanılamıyor');await Sharing.shareAsync(file.uri,{mimeType:'application/octet-stream',dialogTitle:'Notex yedeğini kaydet'})}
-   finally{if(file.exists)file.delete()}
+   file.write(bytes);
+   if(!await Sharing.isAvailableAsync())throw new Error('Paylaşma bu cihazda kullanılamıyor');
+   // ZIP MIME lets Android/iOS file providers recognize the archive instead of a generic .bin.
+   // Keep the cache file briefly after the share sheet closes: some targets read it asynchronously.
+   try{await Sharing.shareAsync(file.uri,{mimeType:'application/zip',UTI:'public.zip-archive',dialogTitle:'Notex yedeğini kaydet'});}
+   finally{setTimeout(()=>{try{if(file.exists)file.delete()}catch(e){console.warn('Geçici yedek temizlenemedi',e)}},60000)}
   }
   await settingsRepository.set('lastBackupAt',new Date().toISOString());
   setLabel('Yedek oluşturuldu');setPercent(100);
