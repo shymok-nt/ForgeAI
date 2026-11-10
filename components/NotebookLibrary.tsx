@@ -1,6 +1,7 @@
 import { useMemo,useState } from 'react';
 import { FlatList,Image,Modal,Pressable,SafeAreaView,ScrollView,StyleSheet,Text,View,useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
+import Svg, { Path, Rect, Text as SvgText } from 'react-native-svg';
 import { Check,Copy,Heart,MoreHorizontal,Plus,Search,Settings2,Trash2,X } from 'lucide-react-native';
 import { NotebookCard } from '@/components/NotebookCard';
 import { EmptyState } from '@/components/EmptyState';
@@ -12,6 +13,7 @@ import type { ThemeColors } from '@/theme/colors';
 import { fonts } from '@/theme/fonts';
 import type { Notebook,SortBy,ViewMode } from '@/types/notebook';
 const sorts:{value:SortBy;label:string}[]=[{value:'updated',label:'Son düzenlenen'},{value:'title',label:'Ada göre'},{value:'created',label:'Oluşturma tarihi'}];
+function NotexWordmark({compact}:{compact:boolean}){return <Svg width={compact?108:128} height={compact?47:55} viewBox="65 155 430 185" accessibilityLabel="Notex yazı logosu"><Rect x={65} y={155} width={430} height={185} rx={20} fill="#F4F1FF"/><SvgText x={80} y={300} fontFamily="Times New Roman" fontSize={150} fontWeight="700" letterSpacing={-3} fill="#1B1535">Notex</SvgText><Path d="M86 319 C120 309 150 327 190 318 S260 311 300 319 S380 326 420 317 S460 315 474 318" fill="none" stroke="#FFD23F" strokeWidth={10} strokeLinecap="round"/></Svg>}
 export function NotebookLibrary({favorites=false}:{favorites?:boolean}){const {colors}=useTheme();const styles=makeStyles(colors);
  const all=useNotebookStore(s=>s.notebooks),folder=useNotebookStore(s=>s.selectedFolder),setFolder=useNotebookStore(s=>s.setSelectedFolder),sortBy=useNotebookStore(s=>s.sortBy),setSortBy=useNotebookStore(s=>s.setSortBy),viewMode=useNotebookStore(s=>s.viewMode),setViewMode=useNotebookStore(s=>s.setViewMode);
  const toggle=useNotebookStore(s=>s.toggleFavorite),duplicate=useNotebookStore(s=>s.duplicateNotebook),remove=useNotebookStore(s=>s.deleteNotebook);
@@ -24,7 +26,7 @@ export function NotebookLibrary({favorites=false}:{favorites?:boolean}){const {c
  const editor=(id?:string)=>router.push({pathname:'/notebook-editor',params:id?{id}:{}});
  const deleteSelected=(n:Notebook)=>{setChecked([]);setSelected(null);void remove(n.id);};
  return <SafeAreaView style={styles.safe}><View style={styles.body}>
- <View style={styles.top}><View style={[styles.brandRow,compactHeader&&{gap:6}]}><Image source={require('../assets/images/icon.png')} style={[styles.brandLogo,compactHeader&&{width:52,height:52,borderRadius:13}]} resizeMode="contain" accessibilityLabel="Notex logosu"/><Text style={[styles.brand,compactHeader&&{fontSize:25}]}>{favorites?'Favoriler':'Notex'}</Text></View><View style={[styles.topActions,compactHeader&&{gap:5}]}>{!favorites&&<Pressable accessibilityRole="button" accessibilityLabel="Ara" onPress={()=>router.push('/search')} style={[styles.round,compactHeader&&{width:38,height:38,borderRadius:19}]}><Search size={22} color={colors.ink}/></Pressable>}<Pressable accessibilityRole="button" accessibilityLabel="Ayarlar" accessibilityHint="Uygulama ve dijital kalem ayarlarını açar" style={styles.round} onPress={()=>router.push('/settings')}><Settings2 size={22} color={colors.ink}/></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Sırala ve görünüm" style={styles.round} onPress={()=>setMenu(true)}><MoreHorizontal size={22} color={colors.ink}/></Pressable></View></View>
+ <View style={styles.top}><View style={[styles.brandRow,compactHeader&&{gap:6}]}><Image source={require('../assets/images/icon.png')} style={[styles.brandLogo,compactHeader&&{width:52,height:52,borderRadius:13}]} resizeMode="contain" accessibilityLabel="Notex logosu"/>{favorites?<Text style={[styles.brand,compactHeader&&{fontSize:25}]}>Favoriler</Text>:<NotexWordmark compact={compactHeader}/>}</View><View style={[styles.topActions,compactHeader&&{gap:5}]}>{!favorites&&<Pressable accessibilityRole="button" accessibilityLabel="Ara" onPress={()=>router.push('/search')} style={[styles.round,compactHeader&&{width:38,height:38,borderRadius:19}]}><Search size={22} color={colors.ink}/></Pressable>}<Pressable accessibilityRole="button" accessibilityLabel="Ayarlar" accessibilityHint="Uygulama ve dijital kalem ayarlarını açar" style={styles.round} onPress={()=>router.push('/settings')}><Settings2 size={22} color={colors.ink}/></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Sırala ve görünüm" style={styles.round} onPress={()=>setMenu(true)}><MoreHorizontal size={22} color={colors.ink}/></Pressable></View></View>
  {!favorites&&<View style={styles.filters}><FolderChips value={folder} onChange={setFolder}/></View>}
 
 
