@@ -96,7 +96,7 @@ export async function importBackup(bytes:Uint8Array,progress:Progress){
    const ext=path.split('.').pop()!.toLowerCase();if(!['jpg','jpeg','png','webp','heic','gif'].includes(ext))throw Error('invalid image');
    const relative='covers/'+Crypto.randomUUID()+'.'+ext;
    const target=new File(Paths.document,relative);
-   const blob=await entry.async('uint8array');target.write(blob);created.push(relative);fileMap.set(path,relative);
+   const blob=await entry.async('uint8array');await target.write(blob);created.push(relative);fileMap.set(path,relative);
    i++;progress('Resimler geri yükleniyor…',Math.round(50*i/Math.max(1,paths.size)));await yieldUI();
   }
   await withSafeTransaction(db,async tx=>{
