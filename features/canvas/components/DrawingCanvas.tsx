@@ -92,7 +92,7 @@ const StaticPaper=memo(function StaticPaper({template,paperColor,pageHeight,fitW
   {dots.map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={lineW*1.2} color="#C4CCDD"/>)}
  </>;
 });
-const InlineTextEditor=memo(function InlineTextEditor({item,left,top,scale,onCommit,onMove}:{item:TextElement;left:number;top:number;scale:number;onCommit:(value:string)=>void;onMove:(dx:number,dy:number)=>void}){
+const InlineTextEditor=memo(function InlineTextEditor({item,left,top,scale,onCommit,onValueChange,onMove}:{item:TextElement;left:number;top:number;scale:number;onCommit:(value:string)=>void;onValueChange:(value:string)=>void;onMove:(dx:number,dy:number)=>void}){
  const [value,setValue]=useState(item.text);
  const [typing,setTyping]=useState(false);
  const [measuredHeight,setMeasuredHeight]=useState(0);
@@ -105,8 +105,10 @@ const InlineTextEditor=memo(function InlineTextEditor({item,left,top,scale,onCom
  useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{commit();return true});return()=>sub.remove()},[]);
  const lineHeight=item.fontSize*1.3*scale;
  const minHeight=Math.max(48,lineHeight*3+8);
- return <GestureDetector gesture={hold}><Animated.View style={{position:'absolute',left,top,width:Math.max(72,item.w*scale),minHeight:Math.max(minHeight,measuredHeight+8),borderWidth:1,borderColor:'#4385DC',borderRadius:6,backgroundColor:'transparent',transform:drag.getTranslateTransform()}}>
-  {typing?<TextInput multiline autoFocus scrollEnabled={false} value={value} onChangeText={setValue} onContentSizeChange={e=>setMeasuredHeight(e.nativeEvent.contentSize.height)} onBlur={()=>setTyping(false)} underlineColorAndroid="transparent" style={{width:'100%',minHeight:Math.max(minHeight-4,measuredHeight),fontSize:item.fontSize*scale,lineHeight,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align,color:item.color,backgroundColor:'transparent',padding:0,paddingHorizontal:3,textAlignVertical:'top'}}/>:
+ const longest=Math.max(0,...value.split('\n').map(line=>line.length));
+ const width=Math.max(72,item.w*scale,Math.min((PAGE_WIDTH-item.x)*scale,longest*item.fontSize*scale*0.58+16));
+ return <GestureDetector gesture={hold}><Animated.View style={{position:'absolute',left,top,width,minHeight:Math.max(minHeight,measuredHeight+8),borderWidth:1,borderColor:'#4385DC',borderRadius:6,backgroundColor:'transparent',transform:drag.getTranslateTransform()}}>
+  {typing?<TextInput multiline autoFocus scrollEnabled={false} value={value} onChangeText={next=>{setValue(next);onValueChange(next)}} onContentSizeChange={e=>setMeasuredHeight(e.nativeEvent.contentSize.height)} onBlur={()=>setTyping(false)} underlineColorAndroid="transparent" style={{width:'100%',minHeight:Math.max(minHeight-4,measuredHeight),fontSize:item.fontSize*scale,lineHeight,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align,color:item.color,backgroundColor:'transparent',padding:0,paddingHorizontal:3,textAlignVertical:'top'}}/>:
    <Text onPress={()=>setTyping(true)} style={{minHeight:minHeight-4,paddingHorizontal:3,fontSize:item.fontSize*scale,lineHeight,color:item.color,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align}}>{value}</Text>}
  </Animated.View></GestureDetector>;
 });
@@ -172,21 +174,23 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const current=editingRef.current;if(!current)return;
   editingRef.current=null;setEditing(null);
   const value=editValueRef.current;
+   const longest=Math.max(0,...value.split('\n').map(line=>line.length));
+   const width=Math.max(current.w,Math.min(PAGE_WIDTH-current.x,longest*current.fontSize*0.58+16));
   const lines=value.split('\n');
-  const charsPerLine=Math.max(1,Math.floor(current.w/(current.fontSize*0.55)));
+  const charsPerLine=Math.max(1,Math.floor(width/(current.fontSize*0.55)));
   const lineCount=lines.reduce((n,line)=>n+Math.max(1,Math.ceil(line.length/charsPerLine)),0);
   let height=Math.max(current.fontSize*1.25,lineCount*current.fontSize*1.25);
   if(interFonts&&value.trim()){
    const builder=Skia.ParagraphBuilder.Make({textAlign:paragraphAlign(current.align)},interFonts);
    builder.pushStyle({fontFamilies:[current.bold?'InterBold':'Inter'],fontSize:current.fontSize,color:Skia.Color(current.color)});
    builder.addText(value);builder.pop();
-   const paragraph=builder.build();paragraph.layout(current.w);
+   const paragraph=builder.build();paragraph.layout(width);
    height=Math.max(current.fontSize*1.25,paragraph.getHeight());
   }
-  const next={...current,text:value,bbox:[current.x,current.y,current.x+current.w,current.y+height] as [number,number,number,number]};
+  const next={...current,w:width,text:value,bbox:[current.x,current.y,current.x+width,current.y+height] as [number,number,number,number]};
   const elements=content.elements.filter(e=>e.id!==current.id);
   if(value.trim())elements.push(next);
-  if((current.text!==value||content.elements.some(e=>e.type==='text'&&e.id===current.id&&(e.x!==current.x||e.y!==current.y)))&&(value.trim()||content.elements.some(e=>e.id===current.id)))onChange({...content,elements});
+  if(value.trim()||content.elements.some(e=>e.id===current.id))onChange({...content,elements});
  };
  const finishRef=useRef(finishText);finishRef.current=finishText;
  useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{if(!editingRef.current)return false;finishRef.current();return true});return()=>sub.remove()},[]);
@@ -810,5 +814,5 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  </Group>}
  {tool!=='eraser'&&tool!=='select'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
  {tool==='eraser'&&<Circle cx={cursorX} cy={cursorY} r={eraserRadius} color="#808080" opacity={cursorOpacity} style="stroke" strokeWidth={1.5}/>}
- </Group></Canvas></View></GestureDetector>{editing&&<InlineTextEditor item={editing} left={(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value+editing.x*fitWidth*zoom.value} top={offsetY.value+editing.y*fitWidth*zoom.value} scale={fitWidth*zoom.value} onCommit={value=>{editValueRef.current=value;finishRef.current()}} onMove={(dx,dy)=>{const current=editingRef.current;if(!current)return;const scale=fitWidth*zoom.value;const x=Math.max(0,Math.min(PAGE_WIDTH-current.w,current.x+dx/scale));const y=Math.max(0,current.y+dy/scale);const next={...current,x,y,bbox:[x,y,x+current.w,y+(current.bbox[3]-current.bbox[1])] as [number,number,number,number]};editingRef.current=next;setEditing(next)}}/>}</View>;
+ </Group></Canvas></View></GestureDetector>{editing&&<InlineTextEditor item={editing} left={(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value+editing.x*fitWidth*zoom.value} top={offsetY.value+editing.y*fitWidth*zoom.value} scale={fitWidth*zoom.value} onCommit={value=>{editValueRef.current=value;finishRef.current()}} onValueChange={value=>{editValueRef.current=value}} onMove={(dx,dy)=>{const current=editingRef.current;if(!current)return;const scale=fitWidth*zoom.value;const x=Math.max(0,Math.min(PAGE_WIDTH-current.w,current.x+dx/scale));const y=Math.max(0,current.y+dy/scale);const next={...current,x,y,bbox:[x,y,x+current.w,y+(current.bbox[3]-current.bbox[1])] as [number,number,number,number]};editingRef.current=next;setEditing(next)}}/>}</View>;
 }
