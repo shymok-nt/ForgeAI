@@ -14,6 +14,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 type Pending={bytes:Uint8Array;summary:string};
 export default function BackupScreen(){
  const {colors}=useTheme();const [busy,setBusy]=useState(false),[label,setLabel]=useState(''),[percent,setPercent]=useState(0),[pending,setPending]=useState<Pending|null>(null),[error,setError]=useState('');
+ const [backupChoices,setBackupChoices]=useState<string[]>([]);
  const refresh=useNotebookStore(s=>s.refresh),refreshFolders=useNotebookStore(s=>s.refreshFolders);
  const progress=(text:string,value:number)=>{setLabel(text);setPercent(value)};
  const run=async(fn:()=>Promise<void>)=>{if(busy)return;setBusy(true);setError('');try{await fn()}catch(e){const msg=e instanceof Error?e.message:'İşlem tamamlanamadı';setError(msg);console.error('Yedekleme hatası',e)}finally{setBusy(false)}};
@@ -52,6 +53,14 @@ export default function BackupScreen(){
   await settingsRepository.set('lastBackupAt',new Date().toISOString());
   setLabel('Yedek oluşturuldu');setPercent(100);
  });
+ const readSelectedAndroidBackup=(uri:string)=>void run(async()=>{
+  const encoded=await LegacyFileSystem.readAsStringAsync(uri,{encoding:LegacyFileSystem.EncodingType.Base64});
+  const binary=atob(encoded);const bytes=new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+  const {manifest}=await inspectBackup(bytes);
+  setBackupChoices([]);
+  setPending({bytes,summary:`${manifest.counts.notebooks} defter, ${manifest.counts.pages} sayfa, ${manifest.counts.files} resim bulundu`});
+ });
  const pick=()=>void run(async()=>{
   let bytes:Uint8Array;
   if(Platform.OS==='android'){
@@ -60,12 +69,18 @@ export default function BackupScreen(){
    const permission=await LegacyFileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
    if(!permission.granted)return;
    const entries=await LegacyFileSystem.StorageAccessFramework.readDirectoryAsync(permission.directoryUri);
-   const candidates=entries.filter(uri=>/\.(?:zip|notex|bin)(?:$|[?#])/i.test(decodeURIComponent(uri)));
+   // The SAF picker selects a directory, not an individual file.
+   // Give a deterministic list of backup names in the app so the user can choose.
+   const candidates=entries.filter(uri=>{
+    const decoded=decodeURIComponent(uri);
+    return /\.(?:zip|notex|bin)(?:$|[?#])/i.test(decoded);
+   });
    if(candidates.length===0)throw new Error('Seçilen klasörde .zip, .notex veya .bin yedeği bulunamadı.');
-   // When several backups exist, select the most recent by its ISO date in filename.
-   // SAF returns no reliable timestamps, so show a clear ambiguity error instead.
-   if(candidates.length>1)throw new Error('Klasörde birden fazla yedek var. Geri yüklenecek dosyayı tek başına ayrı bir klasöre taşıyıp o klasörü seç.');
    const uri=candidates[0];
+   if(candidates.length>1){
+    setBackupChoices(candidates);
+    return;
+   }
    let encoded:string;
    try{
     encoded=await LegacyFileSystem.readAsStringAsync(uri,{encoding:LegacyFileSystem.EncodingType.Base64});
@@ -95,6 +110,7 @@ export default function BackupScreen(){
   <Text style={{color:colors.muted}}>Defterler, sayfalar, çizimler ve resimler tek bir .notex dosyasına kaydedilir. Silinenler yedeğe dahil edilmez.</Text>
   {Platform.OS==='android'&&<Text style={{color:colors.muted,marginTop:12}}>Android: Yedek oluştururken kayıt klasörünü seç. Geri yüklerken içinde tek yedek bulunan klasörü seç; dosya önbelleğe kopyalanmadan doğrudan okunur.</Text>}
   {button('Yedek oluştur',create)}{button('Yedekten geri yükle',pick)}
+  {backupChoices.length>0&&<View style={{marginTop:16}}><Text style={{color:colors.ink,fontWeight:'700'}}>Geri yüklenecek dosyayı seç</Text>{backupChoices.map(uri=><Pressable key={uri} onPress={()=>readSelectedAndroidBackup(uri)} style={{padding:14,marginTop:8,backgroundColor:colors.surfaceRaised,borderRadius:12}}><Text style={{color:colors.ink}}>{decodeURIComponent(uri.split('/').pop()??uri).split(':').pop()}</Text></Pressable>)}{button('İptal',()=>setBackupChoices([]))}</View>}
   {busy&&<View style={{marginTop:20,gap:10}}><ActivityIndicator color={colors.accent}/><Text style={{color:colors.ink}}>{label} %{percent}</Text><View style={{height:6,backgroundColor:colors.border,borderRadius:4}}><View style={{height:6,width:`${percent}%`,backgroundColor:colors.accent,borderRadius:4}}/></View></View>}
   {!!error&&<Text style={{color:colors.coral,marginTop:16}}>{error}</Text>}
   {pending&&<View style={{marginTop:24,padding:16,backgroundColor:colors.surfaceRaised,borderRadius:16,gap:12}}><Text style={{color:colors.ink,fontSize:17,fontWeight:'700'}}>Yedek bulundu</Text><Text style={{color:colors.ink}}>{pending.summary}</Text><Text style={{color:colors.muted}}>Mevcut verilere ekle: Hiçbir defterin üzerine yazılmaz, kopyalar oluşturulur.</Text>{button('Mevcut verilere ekle',restore)}{button('İptal',()=>setPending(null))}</View>}
