@@ -3,6 +3,7 @@ import { ActivityIndicator,Alert,Platform,Pressable,SafeAreaView,ScrollView,Text
 import { router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { File,Paths } from 'expo-file-system';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { createBackup,inspectBackup,importBackup,webDownload } from '@/services/notexBackup';
@@ -16,14 +17,30 @@ export default function BackupScreen(){
  const refresh=useNotebookStore(s=>s.refresh),refreshFolders=useNotebookStore(s=>s.refreshFolders);
  const progress=(text:string,value:number)=>{setLabel(text);setPercent(value)};
  const run=async(fn:()=>Promise<void>)=>{if(busy)return;setBusy(true);setError('');try{await fn()}catch(e){const msg=e instanceof Error?e.message:'İşlem tamamlanamadı';setError(msg);console.error('Yedekleme hatası',e)}finally{setBusy(false)}};
+ const saveAndroid=async(bytes:Uint8Array,name:string)=>{
+  const permission=await LegacyFileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+  if(!permission.granted)return false;
+  const destination=await LegacyFileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri,name,'application/zip');
+  // SAF writes require a base64-encoded string; avoid interpreting ZIP bytes as UTF-8.
+  let base64='';for(let i=0;i<bytes.length;i+=8192){const chunk=bytes.subarray(i,i+8192);base64+=String.fromCharCode(...chunk)}
+  await LegacyFileSystem.writeAsStringAsync(destination,btoa(base64),{encoding:LegacyFileSystem.EncodingType.Base64});
+  const saved=await LegacyFileSystem.readAsStringAsync(destination,{encoding:LegacyFileSystem.EncodingType.Base64});
+  if(saved!==btoa(base64))throw new Error('Kaydedilen yedek doğrulanamadı. Lütfen başka klasör seç.');
+  return true;
+ };
  const create=()=>void run(async()=>{
   const bytes=await createBackup(progress);
   const date=new Date().toISOString().slice(0,10);
   const name='Notex-yedek-'+date+'.notex';
   if(Platform.OS==='web')webDownload(bytes,name);
+  else if(Platform.OS==='android'){
+   progress('Kaydedilecek klasörü seç…',95);
+   const saved=await saveAndroid(bytes,name);
+   if(!saved){setLabel('Kaydetme iptal edildi');return}
+  }
   else{
    const file=new File(Paths.cache,name);
-   file.write(bytes);
+   await file.write(bytes);
    if(!await Sharing.isAvailableAsync())throw new Error('Paylaşma bu cihazda kullanılamıyor');
    // ZIP MIME lets Android/iOS file providers recognize the archive instead of a generic .bin.
    // Keep the cache file briefly after the share sheet closes: some targets read it asynchronously.
@@ -49,6 +66,7 @@ export default function BackupScreen(){
  const button=(text:string,onPress:()=>void,disabled=false)=><Pressable accessibilityRole="button" disabled={disabled||busy} onPress={onPress} style={{backgroundColor:colors.surfaceRaised,borderRadius:14,padding:18,marginTop:12,opacity:(disabled||busy)?0.5:1}}><Text style={{color:colors.ink,fontSize:16,fontWeight:'600'}}>{text}</Text></Pressable>;
  return <SafeAreaView style={{flex:1,backgroundColor:colors.background}}><View style={{height:60,flexDirection:'row',alignItems:'center',paddingHorizontal:16,gap:8}}><Pressable accessibilityRole="button" accessibilityLabel="Geri dön" onPress={()=>router.back()} style={{width:44,height:44,justifyContent:'center'}}><ArrowLeft color={colors.ink}/></Pressable><Text style={{fontSize:22,fontWeight:'700',color:colors.ink}}>Yedekle ve geri yükle</Text></View><ScrollView contentContainerStyle={{padding:20}}>
   <Text style={{color:colors.muted}}>Defterler, sayfalar, çizimler ve resimler tek bir .notex dosyasına kaydedilir. Silinenler yedeğe dahil edilmez.</Text>
+  {Platform.OS==='android'&&<Text style={{color:colors.muted,marginTop:12}}>Android: Yedek oluştur dediğinde kaydedilecek klasörü seç. Dosya doğrudan o klasöre yazılır; paylaşım ekranı kullanılmaz.</Text>}
   {button('Yedek oluştur',create)}{button('Yedekten geri yükle',pick)}
   {busy&&<View style={{marginTop:20,gap:10}}><ActivityIndicator color={colors.accent}/><Text style={{color:colors.ink}}>{label} %{percent}</Text><View style={{height:6,backgroundColor:colors.border,borderRadius:4}}><View style={{height:6,width:`${percent}%`,backgroundColor:colors.accent,borderRadius:4}}/></View></View>}
   {!!error&&<Text style={{color:colors.coral,marginTop:16}}>{error}</Text>}
