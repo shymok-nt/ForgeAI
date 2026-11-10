@@ -1,5 +1,4 @@
-import {Skia} from '@shopify/react-native-skia';
-import type {StrokeElement} from '@/features/canvas/types';
+import {Skia,PaintStyle,StrokeCap,StrokeJoin} from '@shopify/react-native-skia';
 import type {InkWord} from '@/lib/ink/grouping';
 
 const cache=new Map<string,string>();
@@ -22,9 +21,9 @@ function wordToPng(word:InkWord):string{
  canvas.clear(Skia.Color('#FFFFFF'));
  const paint=Skia.Paint();
  paint.setColor(Skia.Color('#000000'));
- paint.setStyle(1);
- paint.setStrokeCap(1);
- paint.setStrokeJoin(1);
+ paint.setStyle(PaintStyle.Stroke);
+ paint.setStrokeCap(StrokeCap.Round);
+ paint.setStrokeJoin(StrokeJoin.Round);
  for(const stroke of word.strokes){
   const points=stroke.points;
   if(points.length<3)continue;
