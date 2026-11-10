@@ -1,6 +1,6 @@
 import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {View,PixelRatio,Platform,TextInput,BackHandler,Keyboard,type LayoutChangeEvent} from 'react-native';
-import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,Skia,vec,Paragraph,useFonts} from '@shopify/react-native-skia';
+import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,Skia,vec,Paragraph,useFonts,TextAlign} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector,PointerType} from 'react-native-gesture-handler';
 import {useSettingsStore} from '@/store/settingsStore';
 import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
@@ -99,13 +99,14 @@ const InlineTextEditor=memo(function InlineTextEditor({item,left,top,scale,onCom
  useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{commit();return true});return()=>sub.remove()},[]);
  return <TextInput multiline autoFocus value={value} onChangeText={setValue} onBlur={commit} style={{position:'absolute',left,top,width:item.w*scale,minHeight:item.fontSize*1.5*scale,fontSize:item.fontSize*scale,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align,color:item.color,backgroundColor:'#FFFFFFEE',padding:0,textAlignVertical:'top'}}/>;
 });
+const paragraphAlign=(align:TextElement['align']):TextAlign=>align==='center'?TextAlign.Center:align==='right'?TextAlign.Right:TextAlign.Left;
 const textLayoutCache=new Map<string,{paragraph:ReturnType<ReturnType<typeof Skia.ParagraphBuilder.Make>['build']>;height:number}>();
 const TextLayer=memo(function TextLayer({element,fonts}:{element:TextElement;fonts:ReturnType<typeof useFonts>}){
  const key=[element.id,element.text,element.fontSize,element.w,element.bold,element.align,element.color].join('|');
  const layout=useMemo(()=>{
   if(!fonts)return null;
   const cached=textLayoutCache.get(key);if(cached)return cached;
-  const builder=Skia.ParagraphBuilder.Make({textAlign:element.align},fonts);
+  const builder=Skia.ParagraphBuilder.Make({textAlign:paragraphAlign(element.align)},fonts);
   builder.pushStyle({fontFamilies:[element.bold?'InterBold':'Inter'],fontSize:element.fontSize,color:Skia.Color(element.color)});
   builder.addText(element.text);builder.pop();
   const paragraph=builder.build();paragraph.layout(element.w);
@@ -165,7 +166,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const lineCount=lines.reduce((n,line)=>n+Math.max(1,Math.ceil(line.length/charsPerLine)),0);
   let height=Math.max(current.fontSize*1.25,lineCount*current.fontSize*1.25);
   if(interFonts&&value.trim()){
-   const builder=Skia.ParagraphBuilder.Make({textAlign:current.align},interFonts);
+   const builder=Skia.ParagraphBuilder.Make({textAlign:paragraphAlign(current.align)},interFonts);
    builder.pushStyle({fontFamilies:[current.bold?'InterBold':'Inter'],fontSize:current.fontSize,color:Skia.Color(current.color)});
    builder.addText(value);builder.pop();
    const paragraph=builder.build();paragraph.layout(current.w);
@@ -200,7 +201,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  if(selectionAction.kind==='scale')next=next.map(e=>ids.has(e.id)?scaleElement(e,(e.bbox[0]+e.bbox[2])/2,(e.bbox[1]+e.bbox[3])/2,selectionAction.value??1.1,selectionAction.value??1.1):e);
  if(selectionAction.kind==='rotate')next=next.map(e=>ids.has(e.id)?rotateElement(e,(e.bbox[0]+e.bbox[2])/2,(e.bbox[1]+e.bbox[3])/2,selectionAction.value??Math.PI/12):e);
  if(selectionAction.kind==='color')next=next.map(e=>ids.has(e.id)?e.type==='stroke'||e.type==='text'?{...e,color:selectionAction.color??e.color}:{...e,stroke:{...e.stroke,color:selectionAction.color??e.stroke.color}}:e);
- if(selectionAction.kind==='textStyle'&&selectionAction.textStyle)next=next.map(e=>{if(!ids.has(e.id)||e.type!=='text')return e;const updated={...e,...selectionAction.textStyle};let height=Math.max(updated.fontSize*1.25,e.bbox[3]-e.bbox[1]);if(interFonts){const builder=Skia.ParagraphBuilder.Make({textAlign:updated.align},interFonts);builder.pushStyle({fontFamilies:[updated.bold?'InterBold':'Inter'],fontSize:updated.fontSize,color:Skia.Color(updated.color)});builder.addText(updated.text);builder.pop();const paragraph=builder.build();paragraph.layout(updated.w);height=Math.max(updated.fontSize*1.25,paragraph.getHeight())}return {...updated,bbox:[updated.x,updated.y,updated.x+updated.w,updated.y+height] as [number,number,number,number]};});
+ if(selectionAction.kind==='textStyle'&&selectionAction.textStyle)next=next.map(e=>{if(!ids.has(e.id)||e.type!=='text')return e;const updated={...e,...selectionAction.textStyle};let height=Math.max(updated.fontSize*1.25,e.bbox[3]-e.bbox[1]);if(interFonts){const builder=Skia.ParagraphBuilder.Make({textAlign:paragraphAlign(updated.align)},interFonts);builder.pushStyle({fontFamilies:[updated.bold?'InterBold':'Inter'],fontSize:updated.fontSize,color:Skia.Color(updated.color)});builder.addText(updated.text);builder.pop();const paragraph=builder.build();paragraph.layout(updated.w);height=Math.max(updated.fontSize*1.25,paragraph.getHeight())}return {...updated,bbox:[updated.x,updated.y,updated.x+updated.w,updated.y+height] as [number,number,number,number]};});
  if(next!==content.elements){onChange(withHeight(next));if(selectionAction.kind==='delete'){setSelectedIds([]);onSelectionChange?.([])}}
  },[selectionAction?.version]);
  const [size,setSize]=useState({width:300,height:450});
