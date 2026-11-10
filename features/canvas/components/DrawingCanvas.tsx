@@ -151,6 +151,7 @@ const Completed=memo(function Completed({content,hiddenIds,fonts}:{content:PageC
 export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false,onImageSelectionChange,imageAction,textStyle={fontSize:48,color:'#1B1B2F',bold:false,align:'left'}}:Props){
  const interFonts=useFonts({Inter:require('@expo-google-fonts/inter/Inter_400Regular.ttf'),InterBold:require('@expo-google-fonts/inter/Inter_700Bold.ttf')});
  const [editing,setEditing]=useState<TextElement|null>(null);
+ const [,setKeyboardLayoutTick]=useState(0);
 
  const editingRef=useRef<TextElement|null>(null);
 
@@ -209,7 +210,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const fitAll=Math.max(0.01,Math.min(fitWidth,size.height/pageHeight));
  const minZoom=1;
  const zoom=useSharedValue(1),offsetX=useSharedValue(0),offsetY=useSharedValue(0);
- useEffect(()=>{const adjust=(event:{endCoordinates:{height:number}})=>{const item=editingRef.current;if(!item)return;const scale=fitWidth*zoom.value;const estimatedBottom=offsetY.value+(item.bbox[3]+32)*scale;const visibleBottom=Math.max(80,size.height-event.endCoordinates.height);if(estimatedBottom>visibleBottom)offsetY.value-=estimatedBottom-visibleBottom;};const show=Keyboard.addListener(Platform.OS==='ios'?'keyboardWillShow':'keyboardDidShow',adjust);return()=>show.remove()},[size.height,fitWidth]);
+ useEffect(()=>{const adjust=(event:{endCoordinates:{height:number}})=>{const item=editingRef.current;if(!item)return;const scale=fitWidth*zoom.value;const estimatedBottom=offsetY.value+(item.bbox[3]+32)*scale;const visibleBottom=Math.max(80,size.height-event.endCoordinates.height);if(estimatedBottom>visibleBottom){offsetY.value-=estimatedBottom-visibleBottom;setKeyboardLayoutTick(v=>v+1)}};const show=Keyboard.addListener(Platform.OS==='ios'?'keyboardWillShow':'keyboardDidShow',adjust);return()=>show.remove()},[size.height,fitWidth]);
  const awaitingCommit=useSharedValue(false);
  const cursorX=useSharedValue(0),cursorY=useSharedValue(0),cursorOn=useSharedValue(false);
  const eraserWidth=useDerivedValue(()=>eraserSize*1.2/(fitWidth*zoom.value));
