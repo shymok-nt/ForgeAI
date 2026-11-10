@@ -9,7 +9,7 @@ import * as Crypto from 'expo-crypto';
 import {groupInkAsync} from '@/lib/ink/grouping';
 import {glyphOffsets,fitWordFont} from '@/lib/ink/naturalText';
 import {useHandwritingFonts,TURKISH_FONT_TEST} from '@/lib/ink/handwritingFonts';
-import {recognizeWords} from '@/lib/recognition/cloud';
+import {recognizeLines} from '@/lib/recognition/lines';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement,type TextElement} from '@/features/canvas/types';
 import {makeStroke,strokePath} from '@/features/canvas/engine/geometry';
 import {pixelErase} from '@/features/canvas/engine/pixelEraser';
@@ -316,42 +316,33 @@ export function DrawingCanvas({fontDebugVersion,content,template,paperColor,tool
   void (async()=>{
    const grouped=await groupInkAsync(source);
    if(cancelled)return;
-   const flat=grouped.flatMap(line=>line.words);
-   const recognized=await recognizeWords(flat,'tr');
+   const recognized=await recognizeLines(grouped);
    if(cancelled)return;
    const fontName=selectionAction.font??'Caveat';
    if(!handwriting.loaded[fontName]||!handwriting.families)throw new Error('Seçilen el yazısı fontu yüklenemedi. Orijinal yazı korundu.');
    const missing=handwriting.missingGlyphs(fontName);
    if(missing.length)throw new Error(fontName+' fontunda Türkçe karakterler eksik: '+missing.join(' '));
    const words:import('@/features/canvas/types').BeautifiedWord[]=[];
-   let index=0;
-   for(const line of grouped){
-    const texts=line.words.map(()=>recognized[index++]?.trim()??'');
-    if(!texts.some(Boolean))continue;
+   for(let i=0;i<grouped.length;i++){
+    const line=grouped[i],text=recognized[i]?.trim();
+    if(!text)throw new Error('Bir satır tanınamadı. Orijinal yazı korundu.');
     const heights=line.words.flatMap(w=>w.strokes.map(stroke=>Math.max(1,stroke.bbox[3]-stroke.bbox[1]))).sort((a,b)=>a-b);
     const middle=Math.floor(heights.length/2);
     const medianHeight=heights.length%2?heights[middle]:(heights[middle-1]+heights[middle])/2;
     const baseline=line.baseline;
-    const left=line.bbox[0];
-    const available=Math.max(1,PAGE_WIDTH-left-12);
-    const measure=(text:string,size:number)=>{
+    const left=line.bbox[0],available=Math.max(1,PAGE_WIDTH-left-12);
+    const measure=(size:number)=>{
      const builder=Skia.ParagraphBuilder.Make({},handwriting.families!);
      builder.pushStyle({fontFamilies:[fontName],fontSize:size});
      builder.addText(text);builder.pop();
-     const paragraph=builder.build();paragraph.layout(PAGE_WIDTH*3);
+     const paragraph=builder.build();paragraph.layout(PAGE_WIDTH*4);
      return paragraph.getLongestLine();
     };
     let size=Math.max(8,Math.min(90,medianHeight*0.9));
-    const spacing=()=>size*0.45;
-    let widths=texts.map(text=>measure(text,size));
-    let total=widths.reduce((sum,w)=>sum+w,0)+Math.max(0,texts.length-1)*spacing();
-    if(total>available){size=Math.max(4,size*available/total);widths=texts.map(text=>measure(text,size));total=widths.reduce((sum,w)=>sum+w,0)+Math.max(0,texts.length-1)*spacing()}
-    let cursor=left;
-    for(let i=0;i<line.words.length;i++){
-     const text=texts[i],width=widths[i];
-     if(text)words.push({id:Crypto.randomUUID(),text,bbox:[cursor,baseline-size,cursor+width,baseline],baseline,fontSize:size,color:line.words[i].strokes[0].color,font:fontName});
-     cursor+=width+spacing();
-    }
+    let width=measure(size);
+    if(width>available){size=Math.max(3,size*available/width);width=measure(size)}
+    const color=line.words[0]?.strokes[0]?.color??'#1B1B2F';
+    words.push({id:Crypto.randomUUID(),text,bbox:[left,baseline-size,left+width,baseline],baseline,fontSize:size,color,font:fontName});
    }
    if(!words.length)throw new Error('Seçilen yazı tanınamadı. Orijinal yazı korundu.');
    const selected=new Set(source.map(e=>e.id));
@@ -368,7 +359,7 @@ export function DrawingCanvas({fontDebugVersion,content,template,paperColor,tool
   const factor=imageAction.kind==='grow'?1.2:1/1.2;
   onChange({...content,images:(content.images??[]).map(i=>i.id!==id?i:{...i,width:Math.max(50,Math.min(PAGE_WIDTH*2,i.width*factor)),height:Math.max(50,Math.min(PAGE_HEIGHT*2,i.height*factor))})});
  },[imageAction?.version]);
- useEffect(()=>{if(!selectionAction)return;const ids=new Set(selectedRef.current);if(!ids.size)return;let next:Element[]=content.elements;
+ useEffect(()=>{if(!selectionAction||selectionAction.kind==='beautify'||selectionAction.kind==='toggleBeautify')return;const ids=new Set(selectedRef.current);if(!ids.size)return;let next:Element[]=content.elements;
  if(selectionAction.kind==='delete')next=next.filter(e=>!ids.has(e.id));
  if(selectionAction.kind==='duplicate')next=[...next,...next.filter(e=>ids.has(e.id)).map(e=>({...moveElement(e,20,20),id:e.id+'-copy-'+selectionAction.version,z:next.length+1}))];
  if(selectionAction.kind==='move')next=next.map(e=>ids.has(e.id)?moveElement(e,selectionAction.value??20,selectionAction.value??20):e);
