@@ -8,6 +8,7 @@ import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
 import {groupInkAsync} from '@/lib/ink/grouping';
 import {glyphOffsets,fitWordFont} from '@/lib/ink/naturalText';
+import {useHandwritingFonts,TURKISH_FONT_TEST} from '@/lib/ink/handwritingFonts';
 import {recognizeWords} from '@/lib/recognition/cloud';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement,type TextElement} from '@/features/canvas/types';
 import {makeStroke,strokePath} from '@/features/canvas/engine/geometry';
@@ -19,7 +20,7 @@ import type {PageTemplate,PaperColor} from '@/types/notebook';
 export type Tool='pen'|'highlighter'|'eraser'|'hand'|'select'|'shape'|'text';
 export type Brush={color:string;width:number;opacity:number};
 type Sample=[number,number,number];
-type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;onStrokeComplete?:(tool:'pen'|'highlighter',color:string)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;onRecognitionState?:(loading:boolean,error:string|null)=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color'|'textStyle'|'beautify'|'toggleBeautify';font?:'Inter'|'InterBold';value?:number;color?:string;textStyle?:Partial<Pick<TextElement,'fontSize'|'color'|'bold'|'align'>>;version:number};transformMode?:boolean;onImageSelectionChange?:(id:string|null)=>void;imageAction?:{kind:'grow'|'shrink'|'delete';version:number};textStyle?:{fontSize:number;color:string;bold:boolean;align:'left'|'center'|'right'}};
+type Props={fontDebugVersion?:number;content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;onStrokeComplete?:(tool:'pen'|'highlighter',color:string)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;onRecognitionState?:(loading:boolean,error:string|null)=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color'|'textStyle'|'beautify'|'toggleBeautify';font?:import('@/features/canvas/types').HandwritingFont;value?:number;color?:string;textStyle?:Partial<Pick<TextElement,'fontSize'|'color'|'bold'|'align'>>;version:number};transformMode?:boolean;onImageSelectionChange?:(id:string|null)=>void;imageAction?:{kind:'grow'|'shrink'|'delete';version:number};textStyle?:{fontSize:number;color:string;bold:boolean;align:'left'|'center'|'right'}};
 const PAPER_STEP=80;
 const normalizeShapeSize=(kind:string,w:number,h:number):[number,number]=>{ 'worklet';
  if(kind==='triangle'){
@@ -207,33 +208,34 @@ const PageImageLayer=memo(function PageImageLayer({item}:{item:import('@/feature
 const NaturalWord=memo(function NaturalWord({word,fonts}:{word:import('@/features/canvas/types').BeautifiedWord;fonts:ReturnType<typeof useFonts>}){
  const glyphs=useMemo(()=>glyphOffsets(word.text),[word.text]);
  const layouts=useMemo(()=>{
-  if(!fonts||!glyphs.length)return [];
+  if(!fonts)return [];
   return glyphs.map(g=>{
    const builder=Skia.ParagraphBuilder.Make({},fonts);
    builder.pushStyle({fontFamilies:[word.font],fontSize:word.fontSize,color:Skia.Color(word.color)});
    builder.addText(g.char);builder.pop();
-   const paragraph=builder.build();
-   paragraph.layout(Math.max(32,word.fontSize*2));
+   const paragraph=builder.build();paragraph.layout(Math.max(48,word.fontSize*3));
    return {paragraph,width:Math.max(1,paragraph.getLongestLine())};
   });
  },[fonts,glyphs,word.font,word.fontSize,word.color]);
  if(!layouts.length)return null;
- const total=layouts.reduce((sum,g)=>sum+g.width,0);
- const available=Math.max(1,word.bbox[2]-word.bbox[0]);
- const scale=Math.min(1,available/Math.max(1,total));
- let cursor=0;
+ let cursor=word.bbox[0];
  return <Group>{layouts.map((layout,index)=>{
-  const g=glyphs[index],x=word.bbox[0]+cursor*scale;
+  const glyph=glyphs[index],x=cursor;
   cursor+=layout.width;
-  const y=word.baseline-word.fontSize*1.2+g.dy;
-  return <Group key={index} origin={vec(x+layout.width*scale/2,y+word.fontSize/2)} transform={[{rotate:g.angle}]}><Group transform={[{translateX:x},{scaleX:scale}]}><Paragraph paragraph={layout.paragraph} x={0} y={y} width={Math.max(32,word.fontSize*2)}/></Group></Group>;
+  const y=word.baseline-word.fontSize+glyph.dy*0.15;
+  const scale=1+Math.sin((glyph.angle+index)*7)*0.02;
+  return <Group key={index} origin={vec(x+layout.width/2,y+word.fontSize/2)} transform={[{rotate:glyph.angle*0.5},{scale}]}><Paragraph paragraph={layout.paragraph} x={x} y={y} width={Math.max(48,word.fontSize*3)}/></Group>;
  })}</Group>;
 });
 const Completed=memo(function Completed({content,hiddenIds,fonts}:{content:PageContent;hiddenIds?:string[];fonts:ReturnType<typeof useFonts>}){
  return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)&&!(content.beautifications??[]).some(b=>b.mode==='beautified'&&b.sourceIds.includes(element.id))).map(element=>element.type==='text'?<TextLayer key={element.id} element={element} fonts={fonts}/>:<StrokeLayer key={element.id} element={element}/>)}</>;
 });
-export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,onStrokeComplete,shapeKind='auto',shapeFill=false,onSelectionChange,onRecognitionState,selectionAction,transformMode=false,onImageSelectionChange,imageAction,textStyle={fontSize:48,color:'#1B1B2F',bold:false,align:'left'}}:Props){
+export function DrawingCanvas({fontDebugVersion,content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,onStrokeComplete,shapeKind='auto',shapeFill=false,onSelectionChange,onRecognitionState,selectionAction,transformMode=false,onImageSelectionChange,imageAction,textStyle={fontSize:48,color:'#1B1B2F',bold:false,align:'left'}}:Props){
  const interFonts=useFonts({Inter:[Inter_400Regular],InterBold:[Inter_700Bold]});
+ const handwriting=useHandwritingFonts();
+ const fontFailureLogged=useRef(false);
+ useEffect(()=>{if(!handwriting.families&&!fontFailureLogged.current){fontFailureLogged.current=true;console.error('[Notex] El yazısı fontları Skia useFonts ile yüklenemedi. Sistem fontuna sessiz geçiş yapılmayacak.')}},[handwriting.families]);
+ useEffect(()=>{if(!fontDebugVersion)return;for(const font of ['Caveat','PatrickHand','DancingScript'] as const){console.log('[Notex font test]',font,TURKISH_FONT_TEST,handwriting.loaded[font]?'loaded':'NOT LOADED',handwriting.missingGlyphs(font))}},[fontDebugVersion,handwriting.families]);
  const [editing,setEditing]=useState<TextElement|null>(null);
  const pendingCloseRef=useRef<{id:string;text:string;remove:boolean}|null>(null);
  const [,setKeyboardLayoutTick]=useState(0);
@@ -309,16 +311,38 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    const flat=grouped.flatMap(line=>line.words);
    const recognized=await recognizeWords(flat,'tr');
    if(cancelled)return;
+   const fontName=selectionAction.font??'Caveat';
+   if(!handwriting.loaded[fontName]||!handwriting.families)throw new Error('Seçilen el yazısı fontu yüklenemedi. Orijinal yazı korundu.');
+   const missing=handwriting.missingGlyphs(fontName);
+   if(missing.length)throw new Error(fontName+' fontunda Türkçe karakterler eksik: '+missing.join(' '));
    const words:import('@/features/canvas/types').BeautifiedWord[]=[];
    let index=0;
    for(const line of grouped){
-    for(const word of line.words){
-     const text=recognized[index++]?.trim()??'';
-     if(!text)continue;
-     const width=Math.max(1,word.bbox[2]-word.bbox[0]);
-     const height=Math.max(1,word.bbox[3]-word.bbox[1]);
-     const fontSize=Math.max(1,Math.min(200,height*0.82,width/(Math.max(1,text.length)*0.6)));
-     words.push({id:Crypto.randomUUID(),text,bbox:word.bbox,baseline:line.baseline,fontSize,color:word.strokes[0].color,font:selectionAction.font??'Inter'});
+    const texts=line.words.map(()=>recognized[index++]?.trim()??'');
+    if(!texts.some(Boolean))continue;
+    const heights=line.words.flatMap(w=>w.strokes.map(stroke=>Math.max(1,stroke.bbox[3]-stroke.bbox[1]))).sort((a,b)=>a-b);
+    const middle=Math.floor(heights.length/2);
+    const medianHeight=heights.length%2?heights[middle]:(heights[middle-1]+heights[middle])/2;
+    const baseline=line.baseline;
+    const left=line.bbox[0];
+    const available=Math.max(1,PAGE_WIDTH-left-12);
+    const measure=(text:string,size:number)=>{
+     const builder=Skia.ParagraphBuilder.Make({},handwriting.families!);
+     builder.pushStyle({fontFamilies:[fontName],fontSize:size});
+     builder.addText(text);builder.pop();
+     const paragraph=builder.build();paragraph.layout(PAGE_WIDTH*3);
+     return paragraph.getLongestLine();
+    };
+    let size=Math.max(8,Math.min(90,medianHeight*0.9));
+    const spacing=()=>size*0.45;
+    let widths=texts.map(text=>measure(text,size));
+    let total=widths.reduce((sum,w)=>sum+w,0)+Math.max(0,texts.length-1)*spacing();
+    if(total>available){size=Math.max(4,size*available/total);widths=texts.map(text=>measure(text,size));total=widths.reduce((sum,w)=>sum+w,0)+Math.max(0,texts.length-1)*spacing()}
+    let cursor=left;
+    for(let i=0;i<line.words.length;i++){
+     const text=texts[i],width=widths[i];
+     if(text)words.push({id:Crypto.randomUUID(),text,bbox:[cursor,baseline-size,cursor+width,baseline],baseline,fontSize:size,color:line.words[i].strokes[0].color,font:fontName});
+     cursor+=width+spacing();
     }
    }
    if(!words.length)throw new Error('Seçilen yazı tanınamadı. Orijinal yazı korundu.');
@@ -928,7 +952,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  {(content.images??[]).map(source=>{const item=source.id===displayImageId&&paintedImage?paintedImage:source;const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/>{Platform.OS==='web'&&<><Line p1={vec(cx,item.y)} p2={imageRotatePoint} color="#3388EE" strokeWidth={imageOutlineWidth}/><Circle cx={cx} cy={imageRotateY} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={cx} cy={imageRotateY} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></>}{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={x} cy={y} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></Group>)}</>}</Group>;return item.id===displayImageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={editing?[editing.id]:tool==='select'?selectedIds:undefined} fonts={interFonts}/>
-  {(content.beautifications??[]).filter(b=>b.mode==='beautified').flatMap(b=>b.words).map(word=><NaturalWord key={word.id} fonts={interFonts} word={word}/>)} 
+  {(content.beautifications??[]).filter(b=>b.mode==='beautified').flatMap(b=>b.words).map(word=><NaturalWord key={word.id} fonts={handwriting.families} word={word}/>)} 
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
  {tool==='select'&&paintedFrame&&<Group transform={selectionTransform}>
