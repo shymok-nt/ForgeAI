@@ -1,5 +1,3 @@
-import type {Request,Response} from 'expo-router/server';
-
 const PROMPT='Bu görüntülerdeki el yazısı satırlarını aynen, sırayla, Türkçe karakterleri (ı, İ, ş, ğ, ç, ö, ü) koruyarak oku. Her görüntü için bir satır metni üret. Sadece JSON dizisi döndür; açıklama, Markdown veya başka hiçbir şey yazma.';
 const MAX_IMAGES=30;
 const MAX_IMAGE_LENGTH=1_500_000;
