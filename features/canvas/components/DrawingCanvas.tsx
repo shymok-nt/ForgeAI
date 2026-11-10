@@ -703,7 +703,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    dragY.value=e.translationY/(fitWidth*zoom.value);
    return;
   }
-  if(tool==='select')return;
+  if(tool==='select'||tool==='text')return;
   const p=pagePoint(e.x,e.y),prev=samples.value[samples.value.length-1];
   if(e.pointerType===PointerType.STYLUS&&penSettings.pressureEnabled&&e.stylusData){
    const pressure=Math.max(0.05,Math.min(1,e.stylusData.pressure??0.5));
