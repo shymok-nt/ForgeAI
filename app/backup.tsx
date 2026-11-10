@@ -12,6 +12,22 @@ import { useNotebookStore } from '@/store/notebookStore';
 import { useTheme } from '@/theme/ThemeProvider';
 
 type Pending={bytes:Uint8Array;summary:string};
+const backupName=(uri:string)=>{try{return decodeURIComponent(uri.split('/').pop()??uri).split(':').pop()??uri}catch{return uri}};
+const backupTimestamp=(uri:string)=>{
+ const name=backupName(uri);
+ const match=/Notex-yedek-(\d{4})-(\d{2})-(\d{2})(?:[-_](\d{2})[-_](\d{2})(?:[-_](\d{2}))?)?/i.exec(name);
+ if(!match)return null;
+ const year=Number(match[1]),month=Number(match[2]),day=Number(match[3]);
+ const hour=Number(match[4]??0),minute=Number(match[5]??0),second=Number(match[6]??0);
+ const date=new Date(year,month-1,day,hour,minute,second);
+ if(date.getFullYear()!==year||date.getMonth()!==month-1||date.getDate()!==day||hour>23||minute>59||second>59)return null;
+ return date.getTime();
+};
+const sortedBackups=(uris:string[])=>[...uris].sort((a,b)=>(backupTimestamp(b)??-1)-(backupTimestamp(a)??-1)||backupName(a).localeCompare(backupName(b),'tr'));
+const backupDateLabel=(uri:string)=>{
+ const time=backupTimestamp(uri);
+ return time===null?'Tarih dosya adından belirlenemiyor':new Date(time).toLocaleString('tr-TR',{year:'numeric',month:'long',day:'numeric',...( /Notex-yedek-\d{4}-\d{2}-\d{2}[-_]\d{2}[-_]\d{2}/i.test(backupName(uri))?{hour:'2-digit' as const,minute:'2-digit' as const}:{})});
+};
 export default function BackupScreen(){
  const {colors}=useTheme();const [busy,setBusy]=useState(false),[label,setLabel]=useState(''),[percent,setPercent]=useState(0),[pending,setPending]=useState<Pending|null>(null),[error,setError]=useState('');
  const [backupChoices,setBackupChoices]=useState<string[]>([]);
@@ -31,7 +47,8 @@ export default function BackupScreen(){
  };
  const create=()=>void run(async()=>{
   const bytes=await createBackup(progress);
-  const date=new Date().toISOString().slice(0,10);
+  const now=new Date();
+  const date=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0'),String(now.getHours()).padStart(2,'0'),String(now.getMinutes()).padStart(2,'0'),String(now.getSeconds()).padStart(2,'0')].join('-');
   // Android document providers recognize .zip reliably with application/zip.
   // The internal ZIP format remains the same as .notex backups on web.
   const name='Notex-yedek-'+date+(Platform.OS==='android'?'.zip':'.notex');
@@ -78,7 +95,7 @@ export default function BackupScreen(){
    if(candidates.length===0)throw new Error('Seçilen klasörde .zip, .notex veya .bin yedeği bulunamadı.');
    const uri=candidates[0];
    if(candidates.length>1){
-    setBackupChoices(candidates);
+    setBackupChoices(sortedBackups(candidates));
     return;
    }
    let encoded:string;
@@ -108,9 +125,9 @@ export default function BackupScreen(){
  const button=(text:string,onPress:()=>void,disabled=false)=><Pressable accessibilityRole="button" disabled={disabled||busy} onPress={onPress} style={{backgroundColor:colors.surfaceRaised,borderRadius:14,padding:18,marginTop:12,opacity:(disabled||busy)?0.5:1}}><Text style={{color:colors.ink,fontSize:16,fontWeight:'600'}}>{text}</Text></Pressable>;
  return <SafeAreaView style={{flex:1,backgroundColor:colors.background}}><View style={{height:60,flexDirection:'row',alignItems:'center',paddingHorizontal:16,gap:8}}><Pressable accessibilityRole="button" accessibilityLabel="Geri dön" onPress={()=>router.back()} style={{width:44,height:44,justifyContent:'center'}}><ArrowLeft color={colors.ink}/></Pressable><Text style={{fontSize:22,fontWeight:'700',color:colors.ink}}>Yedekle ve geri yükle</Text></View><ScrollView contentContainerStyle={{padding:20}}>
   <Text style={{color:colors.muted}}>Defterler, sayfalar, çizimler ve resimler tek bir .notex dosyasına kaydedilir. Silinenler yedeğe dahil edilmez.</Text>
-  {Platform.OS==='android'&&<Text style={{color:colors.muted,marginTop:12}}>Android: Yedek oluştururken kayıt klasörünü seç. Geri yüklerken içinde tek yedek bulunan klasörü seç; dosya önbelleğe kopyalanmadan doğrudan okunur.</Text>}
+  {Platform.OS==='android'&&<Text style={{color:colors.muted,marginTop:12}}>Android: Yedek oluştururken kayıt klasörünü seç. Geri yüklerken yedeklerin bulunduğu klasörü seç; Notex yedekleri tarih sırasıyla listeler.</Text>}
   {button('Yedek oluştur',create)}{button('Yedekten geri yükle',pick)}
-  {backupChoices.length>0&&<View style={{marginTop:16}}><Text style={{color:colors.ink,fontWeight:'700'}}>Geri yüklenecek dosyayı seç</Text>{backupChoices.map(uri=><Pressable key={uri} onPress={()=>readSelectedAndroidBackup(uri)} style={{padding:14,marginTop:8,backgroundColor:colors.surfaceRaised,borderRadius:12}}><Text style={{color:colors.ink}}>{decodeURIComponent(uri.split('/').pop()??uri).split(':').pop()}</Text></Pressable>)}{button('İptal',()=>setBackupChoices([]))}</View>}
+  {backupChoices.length>0&&<View style={{marginTop:16,gap:8}}><Text style={{color:colors.ink,fontWeight:'700',fontSize:17}}>Geri yüklenecek yedek</Text><Text style={{color:colors.muted}}>Dosya adındaki tarihe göre en yeniden eskiye sıralandı. Tarihi olmayan dosyaları kontrol et.</Text>{backupChoices.map((uri,index)=><Pressable key={uri} accessibilityRole="button" disabled={busy} onPress={()=>readSelectedAndroidBackup(uri)} style={{padding:14,backgroundColor:colors.surfaceRaised,borderRadius:12,opacity:busy?0.5:1}}><Text style={{color:colors.ink,fontWeight:'700'}}>{backupName(uri)}</Text><Text style={{color:colors.muted,marginTop:4}}>{backupDateLabel(uri)}{index===0&&backupTimestamp(uri)!==null?' · Tarihe göre en yeni':''}</Text></Pressable>)}{button('İptal',()=>setBackupChoices([]))}</View>}
   {busy&&<View style={{marginTop:20,gap:10}}><ActivityIndicator color={colors.accent}/><Text style={{color:colors.ink}}>{label} %{percent}</Text><View style={{height:6,backgroundColor:colors.border,borderRadius:4}}><View style={{height:6,width:`${percent}%`,backgroundColor:colors.accent,borderRadius:4}}/></View></View>}
   {!!error&&<Text style={{color:colors.coral,marginTop:16}}>{error}</Text>}
   {pending&&<View style={{marginTop:24,padding:16,backgroundColor:colors.surfaceRaised,borderRadius:16,gap:12}}><Text style={{color:colors.ink,fontSize:17,fontWeight:'700'}}>Yedek bulundu</Text><Text style={{color:colors.ink}}>{pending.summary}</Text><Text style={{color:colors.muted}}>Mevcut verilere ekle: Hiçbir defterin üzerine yazılmaz, kopyalar oluşturulur.</Text>{button('Mevcut verilere ekle',restore)}{button('İptal',()=>setPending(null))}</View>}
