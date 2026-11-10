@@ -59,26 +59,29 @@ export default function BackupScreen(){
    if(!asset.file)throw new Error('Bu dosya okunamadı');
    bytes=new Uint8Array(await asset.file.arrayBuffer());
   }else if(Platform.OS==='android'){
-   // The Android picker may return a content:// URI. First copy it into app-owned
-   // cache; File.bytes() is only reliable for an app-readable local file.
-   const localUri=LegacyFileSystem.cacheDirectory+'notex-import-'+Date.now()+'.zip';
+   // DocumentPicker(copyToCacheDirectory:true) already provides an app-readable
+   // cache URI. Copying that URI again is unnecessary and may fail on Android.
+   const isZip=(data:Uint8Array)=>data.length>=4&&data[0]===0x50&&data[1]===0x4b&&
+    ((data[2]===3&&data[3]===4)||(data[2]===5&&data[3]===6));
+   let directError:unknown;
    try{
-    await LegacyFileSystem.copyAsync({from:asset.uri,to:localUri});
-    bytes=await new File(localUri).bytes();
-   }catch(copyError){
-    // Some document providers disallow copyAsync; read their content URI directly.
+    bytes=await new File(asset.uri).bytes();
+    if(!isZip(bytes))throw new Error('Seçilen dosyanın ZIP imzası geçersiz');
+   }catch(error){
+    directError=error;
+    // Fallback for document providers that return a content:// URI despite
+    // copyToCacheDirectory. Read as base64 without text decoding ZIP bytes.
     try{
      const encoded=await LegacyFileSystem.readAsStringAsync(asset.uri,{encoding:LegacyFileSystem.EncodingType.Base64});
      const binary=atob(encoded);
      bytes=new Uint8Array(binary.length);
      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-    }catch(readError){
-     console.error('Android yedek dosyası kopyalanamadı',copyError);
-     console.error('Android yedek dosyası okunamadı',readError);
-     throw new Error('Android dosya sağlayıcısı yedeğe okuma izni vermedi. Dosyayı İndirilenler klasörüne taşıyıp tekrar seç.');
+     if(!isZip(bytes))throw new Error('Dosya ZIP biçiminde değil');
+    }catch(fallbackError){
+     console.error('Android yedek okuma: önbellek URI hatası',directError);
+     console.error('Android yedek okuma: alternatif okuma hatası',fallbackError);
+     throw new Error('Seçilen dosya geçerli bir Notex ZIP yedeği olarak okunamadı. Dosya: '+asset.name);
     }
-   }finally{
-    await LegacyFileSystem.deleteAsync(localUri,{idempotent:true}).catch(()=>{});
    }
   }else bytes=await new File(asset.uri).bytes();
   const {manifest}=await inspectBackup(bytes);
