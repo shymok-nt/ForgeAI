@@ -63,7 +63,7 @@ export default function NoteCanvasScreen(){
  const currentPreset=()=>({tool:tool==='highlighter'?'highlighter' as const:'pen' as const,...brush});
  const savePreset=(id?:string)=>{const item={id:id??Crypto.randomUUID(),...currentPreset()};if(id)setPresets(p=>p.map(v=>v.id===id?item:v));else if(presets.length>=6)Alert.alert('Hazır ayarlar','En fazla 6 hazır ayar eklenebilir.');else setPresets(p=>[...p,item])};
  const applyPreset=(item:Preset)=>{setTool(item.tool);setBrush({color:item.color,width:item.width,opacity:item.opacity})};
- const presetMenu=(item:Preset)=>Alert.alert('Hazır ayar',[{text:'Mevcut ayarı buraya kaydet',onPress:()=>savePreset(item.id)},{text:'Sil',style:'destructive',onPress:()=>setPresets(p=>p.filter(v=>v.id!==item.id))},{text:'Vazgeç',style:'cancel'}]);
+ const presetMenu=(item:Preset)=>Alert.alert('Hazır ayar','İşlem seç',[{text:'Mevcut ayarı buraya kaydet',onPress:()=>savePreset(item.id)},{text:'Sil',style:'destructive',onPress:()=>setPresets(p=>p.filter(v=>v.id!==item.id))},{text:'Vazgeç',style:'cancel'}]);
  const [textStyle,setTextStyle]=useState(defaultTextStyle);
  const controllerRef=useRef<CanvasController|null>(null);controllerRef.current=controller;
  useEffect(()=>{let active=true;if(id){void notebookRepository.getById(id).then(row=>{if(!active)return;if(!row){router.replace('/(tabs)');return;}setSelectedId(null);void load(id)}).catch(error=>{console.error('Defter açılamadı',error);if(active)router.replace('/(tabs)')})}return()=>{active=false}},[id,load]);
