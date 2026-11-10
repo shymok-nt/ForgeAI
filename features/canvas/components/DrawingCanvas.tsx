@@ -1,21 +1,21 @@
 import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
-import {View,PixelRatio,Platform,type LayoutChangeEvent} from 'react-native';
-import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,Skia,vec} from '@shopify/react-native-skia';
+import {View,PixelRatio,Platform,TextInput,Keyboard,BackHandler,type LayoutChangeEvent} from 'react-native';
+import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,Skia,vec,Paragraph,useFonts} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector,PointerType} from 'react-native-gesture-handler';
 import {useSettingsStore} from '@/store/settingsStore';
 import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
-import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement} from '@/features/canvas/types';
+import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement,type TextElement} from '@/features/canvas/types';
 import {makeStroke,strokePath} from '@/features/canvas/engine/geometry';
 import {pixelErase} from '@/features/canvas/engine/pixelEraser';
 import {recognizeShape} from '@/features/canvas/engine/recognizeShape';
 import {shapePath,makeShape,lassoSelect,moveElement,scaleElement,rotateElement} from '@/features/canvas/engine/shapes';
 import type {ShapeMode,Element} from '@/features/canvas/types';
 import type {PageTemplate,PaperColor} from '@/types/notebook';
-export type Tool='pen'|'highlighter'|'eraser'|'hand'|'select'|'shape';
+export type Tool='pen'|'highlighter'|'eraser'|'hand'|'select'|'shape'|'text';
 export type Brush={color:string;width:number;opacity:number};
 type Sample=[number,number,number];
-type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number};transformMode?:boolean;onImageSelectionChange?:(id:string|null)=>void;imageAction?:{kind:'grow'|'shrink'|'delete';version:number}};
+type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color';value?:number;color?:string;version:number};transformMode?:boolean;onImageSelectionChange?:(id:string|null)=>void;imageAction?:{kind:'grow'|'shrink'|'delete';version:number};textStyle?:{fontSize:number;color:string;bold:boolean;align:'left'|'center'|'right'}};
 const PAPER_STEP=80;
 const normalizeShapeSize=(kind:string,w:number,h:number):[number,number]=>{ 'worklet';
  if(kind==='triangle'){
@@ -91,6 +91,23 @@ const StaticPaper=memo(function StaticPaper({template,paperColor,pageHeight,fitW
   {dots.map((p,i)=><Circle key={i} cx={p[0]} cy={p[1]} r={lineW*1.2} color="#C4CCDD"/>)}
  </>;
 });
+const textLayoutCache=new Map<string,{paragraph:ReturnType<ReturnType<typeof Skia.ParagraphBuilder.Make>['build']>;height:number}>();
+const TextLayer=memo(function TextLayer({element,fonts}:{element:TextElement;fonts:ReturnType<typeof useFonts>}){
+ const key=[element.id,element.text,element.fontSize,element.w,element.bold,element.align,element.color].join('|');
+ const layout=useMemo(()=>{
+  if(!fonts)return null;
+  const cached=textLayoutCache.get(key);if(cached)return cached;
+  const builder=Skia.ParagraphBuilder.Make({textAlign:element.align},fonts);
+  builder.pushStyle({fontFamilies:[element.bold?'InterBold':'Inter'],fontSize:element.fontSize,color:Skia.Color(element.color)});
+  builder.addText(element.text);builder.pop();
+  const paragraph=builder.build();paragraph.layout(element.w);
+  const result={paragraph,height:paragraph.getHeight()};
+  textLayoutCache.set(key,result);
+  if(textLayoutCache.size>400){const first=textLayoutCache.keys().next().value;if(first)textLayoutCache.delete(first)}
+  return result;
+ },[key,fonts]);
+ return layout?<Paragraph paragraph={layout.paragraph} x={element.x} y={element.y} width={element.w}/>:null;
+});
 const StrokeLayer=memo(function StrokeLayer({element}:{element:Element}){
  const path=useMemo(()=>cachedPath(element),[element]);
  if(element.type==='text')return null;
@@ -120,10 +137,35 @@ const PageImageLayer=memo(function PageImageLayer({item}:{item:import('@/feature
  },[item.uri]);
  return image?<SkiaImage image={image} x={item.x} y={item.y} width={item.width} height={item.height} fit="contain"/>:null;
 });
-const Completed=memo(function Completed({content,hiddenIds}:{content:PageContent;hiddenIds?:string[]}){
- return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)).map(element=><StrokeLayer key={element.id} element={element}/>)}</>;
+const Completed=memo(function Completed({content,hiddenIds,fonts}:{content:PageContent;hiddenIds?:string[];fonts:ReturnType<typeof useFonts>}){
+ return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)).map(element=>element.type==='text'?<TextLayer key={element.id} element={element} fonts={fonts}/>:<StrokeLayer key={element.id} element={element}/>)}</>;
 });
-export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false,onImageSelectionChange,imageAction}:Props){
+export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false,onImageSelectionChange,imageAction,textStyle={fontSize:48,color:'#1B1B2F',bold:false,align:'left'}}:Props){
+ const interFonts=useFonts({Inter:require('@expo-google-fonts/inter/Inter_400Regular.ttf'),InterBold:require('@expo-google-fonts/inter/Inter_700Bold.ttf')});
+ const [editing,setEditing]=useState<TextElement|null>(null);
+ const [draftText,setDraftText]=useState('');
+ const editingRef=useRef<TextElement|null>(null);
+ const draftTextRef=useRef('');
+ const finishText=()=>{
+  const current=editingRef.current;if(!current)return;
+  editingRef.current=null;setEditing(null);
+  const value=draftTextRef.current;
+  const lines=value.split('\\n');
+  const charsPerLine=Math.max(1,Math.floor(current.w/(current.fontSize*0.55)));
+  const lineCount=lines.reduce((n,line)=>n+Math.max(1,Math.ceil(line.length/charsPerLine)),0);
+  const height=Math.max(current.fontSize*1.25,lineCount*current.fontSize*1.25);
+  const next={...current,text:value,bbox:[current.x,current.y,current.x+current.w,current.y+height] as [number,number,number,number]};
+  const elements=content.elements.filter(e=>e.id!==current.id);
+  if(value.trim())elements.push(next);
+  onChange({...content,elements});
+ };
+ const finishRef=useRef(finishText);finishRef.current=finishText;
+ useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{if(!editingRef.current)return false;finishRef.current();return true});return()=>sub.remove()},[]);
+ const beginText=(x:number,y:number)=>{
+  const hit=[...content.elements].reverse().find(e=>e.type==='text'&&x>=e.bbox[0]&&x<=e.bbox[2]&&y>=e.bbox[1]&&y<=e.bbox[3]) as TextElement|undefined;
+  const current=hit??{id:Crypto.randomUUID(),type:'text' as const,z:content.elements.length,createdAt:new Date().toISOString(),x,y,w:Math.min(560,PAGE_WIDTH-x),text:'',fontSize:textStyle.fontSize,color:textStyle.color,bold:textStyle.bold,align:textStyle.align,bbox:[x,y,x+Math.min(560,PAGE_WIDTH-x),y+textStyle.fontSize*1.25] as [number,number,number,number]};
+  editingRef.current=current;draftTextRef.current=current.text;setDraftText(current.text);setEditing(current);
+ };
  const penSettings=useSettingsStore(state=>state.penSettings);
  const [selectedIds,setSelectedIds]=useState<string[]>([]);
  const selectedRef=useRef<string[]>([]);selectedRef.current=selectedIds;
@@ -523,6 +565,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
     return;
    }
   }
+  if(tool==='text'){samples.value=[];drawing.value=false;draft.value='';blocked.value=true;return;}
   if(tool==='select'){
    samples.value=[pagePoint(e.x,e.y)];drawing.value=false;draft.value='';
    return;
@@ -706,7 +749,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
  }).runOnJS(false);
  const singleTap=Gesture.Tap().numberOfTaps(1).maxDuration(250).maxDistance(12).onEnd(e=>{
-  if(!blocked.value){const p=pagePoint(e.x,e.y);runOnJS(selectAt)(p[0],p[1]);}
+  if(!blocked.value){const p=pagePoint(e.x,e.y);if(tool==='text')runOnJS(beginText)(p[0],p[1]);else runOnJS(selectAt)(p[0],p[1]);}
  }).runOnJS(false);
  const gestures=Gesture.Simultaneous(pan,pinch,rotation,singleTap);
 
@@ -716,11 +759,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
  {(content.images??[]).map(source=>{const item=source.id===displayImageId&&paintedImage?paintedImage:source;const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/>{Platform.OS==='web'&&<><Line p1={vec(cx,item.y)} p2={imageRotatePoint} color="#3388EE" strokeWidth={imageOutlineWidth}/><Circle cx={cx} cy={imageRotateY} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={cx} cy={imageRotateY} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></>}{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={x} cy={y} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></Group>)}</>}</Group>;return item.id===displayImageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
  <Group layer={tool==='eraser'}>
-  <Completed content={content} hiddenIds={tool==='select'?selectedIds:undefined}/>
+  <Completed content={content} hiddenIds={editing?[editing.id]:tool==='select'?selectedIds:undefined} fonts={interFonts}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
  {tool==='select'&&paintedFrame&&<Group transform={selectionTransform}>
-  {paintedElements.map(element=><StrokeLayer key={element.id} element={element}/>)}
+  {paintedElements.map(element=>element.type==='text'?<TextLayer key={element.id} element={element} fonts={interFonts}/>:<StrokeLayer key={element.id} element={element}/>)}
   {(()=>{
    const bounds=paintedFrame.bounds;
    const rotation=paintedFrame.rotation;
@@ -735,5 +778,5 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  </Group>}
  {tool!=='eraser'&&tool!=='select'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
  {tool==='eraser'&&<Circle cx={cursorX} cy={cursorY} r={eraserRadius} color="#808080" opacity={cursorOpacity} style="stroke" strokeWidth={1.5}/>}
- </Group></Canvas></View></GestureDetector></View>;
+ </Group></Canvas></View></GestureDetector>{editing&&<TextInput multiline autoFocus value={draftText} onChangeText={value=>{draftTextRef.current=value;setDraftText(value)}} onBlur={()=>finishRef.current()} style={{position:'absolute',left:(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value+editing.x*fitWidth*zoom.value,top:offsetY.value+editing.y*fitWidth*zoom.value,width:editing.w*fitWidth*zoom.value,minHeight:editing.fontSize*1.5*fitWidth*zoom.value,fontSize:editing.fontSize*fitWidth*zoom.value,fontFamily:editing.bold?'Inter_700Bold':'Inter_400Regular',fontWeight:editing.bold?'700':'400',textAlign:editing.align,color:editing.color,backgroundColor:'#FFFFFFEE',padding:0,textAlignVertical:'top'}}/>}</View>;
 }
