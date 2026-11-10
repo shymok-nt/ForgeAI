@@ -61,7 +61,7 @@ const pathCache=new Map<string,{element:Element;path:ReturnType<typeof strokePat
 const cachedPath=(element:Element)=>{
  const hit=pathCache.get(element.id);
  if(hit?.element===element)return hit.path;
- const path=element.type==='stroke'?strokePath(element):shapePath(element);
+ const path=element.type==='stroke'?strokePath(element):element.type==='shape'?shapePath(element):Skia.Path.Make();
  pathCache.set(element.id,{element,path});
  if(pathCache.size>2500){for(const id of Array.from(pathCache.keys()).slice(0,500))pathCache.delete(id)}
  return path;
@@ -93,6 +93,7 @@ const StaticPaper=memo(function StaticPaper({template,paperColor,pageHeight,fitW
 });
 const StrokeLayer=memo(function StrokeLayer({element}:{element:Element}){
  const path=useMemo(()=>cachedPath(element),[element]);
+ if(element.type==='text')return null;
  if(element.type==='shape'){
   const {x,y,w,h,rotation}=element.params;
   const center=vec(x+w/2,y+h/2);
@@ -139,7 +140,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  if(selectionAction.kind==='move')next=next.map(e=>ids.has(e.id)?moveElement(e,selectionAction.value??20,selectionAction.value??20):e);
  if(selectionAction.kind==='scale')next=next.map(e=>ids.has(e.id)?scaleElement(e,(e.bbox[0]+e.bbox[2])/2,(e.bbox[1]+e.bbox[3])/2,selectionAction.value??1.1,selectionAction.value??1.1):e);
  if(selectionAction.kind==='rotate')next=next.map(e=>ids.has(e.id)?rotateElement(e,(e.bbox[0]+e.bbox[2])/2,(e.bbox[1]+e.bbox[3])/2,selectionAction.value??Math.PI/12):e);
- if(selectionAction.kind==='color')next=next.map(e=>ids.has(e.id)?e.type==='stroke'?{...e,color:selectionAction.color??e.color}:{...e,stroke:{...e.stroke,color:selectionAction.color??e.stroke.color}}:e);
+ if(selectionAction.kind==='color')next=next.map(e=>ids.has(e.id)?e.type==='stroke'||e.type==='text'?{...e,color:selectionAction.color??e.color}:{...e,stroke:{...e.stroke,color:selectionAction.color??e.stroke.color}}:e);
  if(next!==content.elements){onChange(withHeight(next));if(selectionAction.kind==='delete'){setSelectedIds([]);onSelectionChange?.([])}}
  },[selectionAction?.version]);
  const [size,setSize]=useState({width:300,height:450});
