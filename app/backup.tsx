@@ -58,6 +58,18 @@ export default function BackupScreen(){
   if(Platform.OS==='web'){
    if(!asset.file)throw new Error('Bu dosya okunamadı');
    bytes=new Uint8Array(await asset.file.arrayBuffer());
+  }else if(Platform.OS==='android'){
+   // Android's document provider may return content:// URIs that File.bytes cannot read.
+   // Legacy readAsStringAsync supports content URIs and reads the selected ZIP as base64.
+   try{
+    const encoded=await LegacyFileSystem.readAsStringAsync(asset.uri,{encoding:LegacyFileSystem.EncodingType.Base64});
+    const binary=atob(encoded);
+    bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+   }catch(error){
+    console.warn('Seçilen yedek okunamadı',error);
+    throw new Error('Bu dosya okunamadı. Dosyayı İndirilenler klasöründen tekrar seç.');
+   }
   }else bytes=await new File(asset.uri).bytes();
   const {manifest}=await inspectBackup(bytes);
   setPending({bytes,summary:`${manifest.counts.notebooks} defter, ${manifest.counts.pages} sayfa, ${manifest.counts.files} resim bulundu`});
