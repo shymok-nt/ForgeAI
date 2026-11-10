@@ -985,5 +985,5 @@ export function DrawingCanvas({fontDebugVersion,content,template,paperColor,tool
   onChange({...content,beautifications:updated});
  }
  setWordEditing(null);
-}}><Text style={{color:'#2466DD',fontWeight:'600'}}>Kaydet</Text></Pressable></View></View></View></Modal>{recognitionPreview.length>0&&<View pointerEvents="none" style={{position:'absolute',top:10,left:10,right:10,backgroundColor:'#FFFFFFEE',borderRadius:8,padding:8,zIndex:50}}><Text numberOfLines={3} style={{fontSize:11,color:'#252525'}}>Tanınan metin: {recognitionPreview.join(' | ')}</Text></View>}</View>;
+}}><Text style={{color:'#2466DD',fontWeight:'600'}}>Kaydet</Text></Pressable></View></View></View></Modal>}{recognitionPreview.length>0&&<View pointerEvents="none" style={{position:'absolute',top:10,left:10,right:10,backgroundColor:'#FFFFFFEE',borderRadius:8,padding:8,zIndex:50}}><Text numberOfLines={3} style={{fontSize:11,color:'#252525'}}>Tanınan metin: {recognitionPreview.join(' | ')}</Text></View>}</View>;
 }
