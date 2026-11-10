@@ -31,7 +31,9 @@ export default function BackupScreen(){
  const create=()=>void run(async()=>{
   const bytes=await createBackup(progress);
   const date=new Date().toISOString().slice(0,10);
-  const name='Notex-yedek-'+date+'.notex';
+  // Android document providers recognize .zip reliably with application/zip.
+  // The internal ZIP format remains the same as .notex backups on web.
+  const name='Notex-yedek-'+date+(Platform.OS==='android'?'.zip':'.notex');
   if(Platform.OS==='web')webDownload(bytes,name);
   else if(Platform.OS==='android'){
    progress('Kaydedilecek klasörü seç…',95);
@@ -59,32 +61,32 @@ export default function BackupScreen(){
    if(!asset.file)throw new Error('Bu dosya okunamadı');
    bytes=new Uint8Array(await asset.file.arrayBuffer());
   }else if(Platform.OS==='android'){
-   // DocumentPicker(copyToCacheDirectory:true) already provides an app-readable
-   // cache URI. Copying that URI again is unnecessary and may fail on Android.
-   const isZip=(data:Uint8Array)=>data.length>=4&&data[0]===0x50&&data[1]===0x4b&&
-    ((data[2]===3&&data[3]===4)||(data[2]===5&&data[3]===6));
-   let directError:unknown;
+   // DocumentPicker has already copied the selected document into its cache.
+   // Use the legacy base64 reader for both file:// and content:// URI schemes;
+   // it avoids File.bytes() permission differences between Android providers.
    try{
-    bytes=await new File(asset.uri).bytes();
-    if(!isZip(bytes))throw new Error('Seçilen dosyanın ZIP imzası geçersiz');
-   }catch(error){
-    directError=error;
-    // Fallback for document providers that return a content:// URI despite
-    // copyToCacheDirectory. Read as base64 without text decoding ZIP bytes.
+    const encoded=await LegacyFileSystem.readAsStringAsync(asset.uri,{encoding:LegacyFileSystem.EncodingType.Base64});
+    const binary=atob(encoded);
+    bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+   }catch(primaryError){
     try{
-     const encoded=await LegacyFileSystem.readAsStringAsync(asset.uri,{encoding:LegacyFileSystem.EncodingType.Base64});
-     const binary=atob(encoded);
-     bytes=new Uint8Array(binary.length);
-     for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-     if(!isZip(bytes))throw new Error('Dosya ZIP biçiminde değil');
+     bytes=await new File(asset.uri).bytes();
     }catch(fallbackError){
-     console.error('Android yedek okuma: önbellek URI hatası',directError);
-     console.error('Android yedek okuma: alternatif okuma hatası',fallbackError);
-     throw new Error('Seçilen dosya geçerli bir Notex ZIP yedeği olarak okunamadı. Dosya: '+asset.name);
+     console.error('Android yedek URI:',asset.uri,'dosya:',asset.name,'boyut:',asset.size);
+     console.error('Base64 okuma hatası:',primaryError,'File.bytes hatası:',fallbackError);
+     throw new Error('Android seçilen dosyayı okuyamadı: '+(primaryError instanceof Error?primaryError.message:String(primaryError)));
     }
    }
+   // Report actual bytes instead of incorrectly treating every read failure as a bad backup.
+   const header=Array.from(bytes.subarray(0,8)).map(n=>n.toString(16).padStart(2,'0')).join(' ');
+   console.info('Notex Android import',asset.name,'bytes:',bytes.length,'header:',header);
+   if(bytes.length<4||bytes[0]!==80||bytes[1]!==75){
+    throw new Error('Seçilen dosya ZIP içeriği taşımıyor ('+bytes.length+' bayt, ilk baytlar: '+header+'). Android üzerinde yeni oluşturulmuş .zip yedeğini seç.');
+   }
   }else bytes=await new File(asset.uri).bytes();
-  const {manifest}=await inspectBackup(bytes);
+  let manifest:Awaited<ReturnType<typeof inspectBackup>>['manifest'];
+  try{({manifest}=await inspectBackup(bytes))}catch(e){console.error('Notex ZIP doğrulama hatası',e);throw new Error('ZIP okundu ancak Notex yedek yapısı doğrulanamadı: '+(e instanceof Error?e.message:String(e)))}
   setPending({bytes,summary:`${manifest.counts.notebooks} defter, ${manifest.counts.pages} sayfa, ${manifest.counts.files} resim bulundu`});
  });
  const restore=()=>{if(!pending)return;const bytes=pending.bytes;setPending(null);void run(async()=>{await importBackup(bytes,progress);await refreshFolders();await refresh();Alert.alert('Tamamlandı','Defterler mevcut verilere eklendi.')})};
