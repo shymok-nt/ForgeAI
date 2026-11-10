@@ -22,7 +22,7 @@ const PageItem=memo(function PageItem({page,index,count,tablet,colors,selected,c
  const gesture=useMemo(()=>Gesture.Race(drag,hold,tap),[drag,hold,tap]);
  const style=useAnimatedStyle(()=>({transform:[tablet?{translateY:translation.value}:{translateX:translation.value},{scale:withSpring(active.value?1.07:1)}],zIndex:active.value?100:0,opacity:active.value?0.92:1}));
  return <View style={{width:tablet?108:100,height:SPACING,alignItems:'center',justifyContent:'center'}}>
- <GestureDetector gesture={gesture}><Animated.View style={style}>
+ <GestureDetector gesture={gesture}><Animated.View style={[style,{touchAction:'none'}]}>
  <View accessibilityLabel={`Sayfa ${index+1}`} style={{padding:5,borderRadius:13,borderWidth:2,borderColor:checked||selected?colors.accent:colors.border,backgroundColor:colors.surface,alignItems:'center'}}>
  <PagePreview template={page.template} paperColor={page.paperColor} width={80} height={Math.min(108,Math.max(88,Math.round(108*(parseContent(page.content).h??PAGE_HEIGHT)/PAGE_HEIGHT)))}/>
  {multiSelect&&<View style={{position:'absolute',right:0,top:0,width:22,height:22,borderRadius:11,alignItems:'center',justifyContent:'center',backgroundColor:checked?colors.accent:colors.surfaceRaised,borderWidth:1,borderColor:colors.accent}}>{checked&&<Check size={14} color="#FFFFFF"/>}</View>}
@@ -31,7 +31,7 @@ const PageItem=memo(function PageItem({page,index,count,tablet,colors,selected,c
  </View>;
 });
 export const CanvasPageStrip=memo(function CanvasPageStrip({pages,selectedId,tablet,colors,onSelect,onAdd,onMove,onActions,multiSelect=false,selectedPageIds=[],onToggle,onEnterSelection}:Props){
- return <ScrollView horizontal={!tablet} showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false} contentContainerStyle={{padding:12,alignItems:'center',gap:0,flexGrow:tablet?0:1}}>
+ return <ScrollView horizontal={!tablet} disableScrollViewPanResponder showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false} contentContainerStyle={{padding:12,alignItems:'center',gap:0,flexGrow:tablet?0:1}}>
  {pages.map((page,index)=><PageItem key={page.id} page={page} index={index} count={pages.length} tablet={tablet} colors={colors} selected={page.id===selectedId} checked={selectedPageIds.includes(page.id)} multiSelect={multiSelect} onSelect={onSelect} onMove={onMove} onActions={onActions} onToggle={onToggle??onSelect} onEnterSelection={onEnterSelection??onSelect}/>)}
  {!multiSelect&&<Pressable accessibilityRole="button" accessibilityLabel="Sayfa ekle" onPress={onAdd} style={{width:90,height:108,borderWidth:1,borderStyle:'dashed',borderColor:colors.border,borderRadius:8,alignItems:'center',justifyContent:'center',gap:5}}><Plus size={24} color={colors.accent}/><Text style={{fontSize:12,color:colors.accent}}>Sayfa ekle</Text></Pressable>}
  </ScrollView>;
