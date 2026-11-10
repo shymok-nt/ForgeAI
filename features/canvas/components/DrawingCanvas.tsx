@@ -189,13 +189,23 @@ const Completed=memo(function Completed({content,hiddenIds,fonts}:{content:PageC
 export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false,onImageSelectionChange,imageAction,textStyle={fontSize:48,color:'#1B1B2F',bold:false,align:'left'}}:Props){
  const interFonts=useFonts({Inter:[Inter_400Regular],InterBold:[Inter_700Bold]});
  const [editing,setEditing]=useState<TextElement|null>(null);
- const [pendingText,setPendingText]=useState<TextElement|null>(null);
- const visiblePendingText=pendingText&&!content.elements.some(e=>e.type==='text'&&e.id===pendingText.id&&e.text===pendingText.text&&e.x===pendingText.x&&e.y===pendingText.y)?pendingText:null;
+ const pendingCloseRef=useRef<{id:string;text:string;remove:boolean}|null>(null);
  const [,setKeyboardLayoutTick]=useState(0);
 
  const editingRef=useRef<TextElement|null>(null);
 
  const editValueRef=useRef('');
+ // Keep the original editor mounted until the updated content reaches the canvas.
+ // No duplicate text layer or temporary rendered copy is created.
+ useLayoutEffect(()=>{
+  const pending=pendingCloseRef.current;
+  if(!pending)return;
+  const saved=content.elements.find(e=>e.id===pending.id);
+  if(pending.remove?!saved:saved?.type==='text'&&saved.text===pending.text){
+   pendingCloseRef.current=null;
+   setEditing(null);
+  }
+ },[content]);
  const finishText=()=>{
   const current=editingRef.current;if(!current)return;
   const value=editValueRef.current;
@@ -215,10 +225,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const next={...current,w:width,text:value,bbox:[current.x,current.y,current.x+width,current.y+height] as [number,number,number,number]};
   const elements=content.elements.filter(e=>e.id!==current.id);
   if(value.trim())elements.push(next);
-  // Render the committed text until the parent content has caught up.
-  setPendingText(value.trim()?next:null);
-  editingRef.current=null;setEditing(null);
-  if(value.trim()||content.elements.some(e=>e.id===current.id))onChange({...content,elements});
+  editingRef.current=null;
+  if(value.trim()||content.elements.some(e=>e.id===current.id)){
+   pendingCloseRef.current={id:current.id,text:value,remove:!value.trim()};
+   onChange({...content,elements});
+  }else setEditing(null);
  };
  const finishRef=useRef(finishText);finishRef.current=finishText;
  useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{if(!editingRef.current)return false;finishRef.current();return true});return()=>sub.remove()},[]);
@@ -226,7 +237,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    if(editingRef.current){finishRef.current();return;}
   const hit=[...content.elements].reverse().find(e=>e.type==='text'&&x>=e.bbox[0]&&x<=e.bbox[2]&&y>=e.bbox[1]&&y<=e.bbox[3]) as TextElement|undefined;
   const current=hit??{id:Crypto.randomUUID(),type:'text' as const,z:content.elements.length,createdAt:new Date().toISOString(),x,y,w:Math.max(120,Math.min(360,PAGE_WIDTH-x)),text:'',fontSize:textStyle.fontSize,color:textStyle.color,bold:textStyle.bold,align:textStyle.align,bbox:[x,y,x+Math.max(120,Math.min(360,PAGE_WIDTH-x)),y+textStyle.fontSize*1.3*3] as [number,number,number,number]};
-  setPendingText(null);
+  pendingCloseRef.current=null;
   editingRef.current=current;editValueRef.current=current.text;setEditing(current);
  };
  const penSettings=useSettingsStore(state=>state.penSettings);
@@ -824,8 +835,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
  {(content.images??[]).map(source=>{const item=source.id===displayImageId&&paintedImage?paintedImage:source;const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/>{Platform.OS==='web'&&<><Line p1={vec(cx,item.y)} p2={imageRotatePoint} color="#3388EE" strokeWidth={imageOutlineWidth}/><Circle cx={cx} cy={imageRotateY} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={cx} cy={imageRotateY} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></>}{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={x} cy={y} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></Group>)}</>}</Group>;return item.id===displayImageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
  <Group layer={tool==='eraser'}>
-  <Completed content={content} hiddenIds={editing?[editing.id]:visiblePendingText?[visiblePendingText.id]:tool==='select'?selectedIds:undefined} fonts={interFonts}/>
-   {visiblePendingText&&<TextLayer element={visiblePendingText} fonts={interFonts}/>}
+  <Completed content={content} hiddenIds={editing?[editing.id]:tool==='select'?selectedIds:undefined} fonts={interFonts}/>
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
  {tool==='select'&&paintedFrame&&<Group transform={selectionTransform}>
