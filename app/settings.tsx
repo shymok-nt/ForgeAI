@@ -1,4 +1,5 @@
-import { useEffect,type ReactNode } from 'react';
+import { useEffect,useState,type ReactNode } from 'react';
+import { settingsRepository } from '@/db/repositories/settingsRepository';
 import { useNotebookStore } from '@/store/notebookStore';
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
@@ -9,6 +10,7 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { PagePreview } from '@/components/PagePreview';
 import type { PageTemplate,PaperColor } from '@/types/notebook';
 export default function SettingsScreen(){
+ const [lastBackup,setLastBackup]=useState<string|null>(null);useEffect(()=>{void settingsRepository.get('lastBackupAt').then(setLastBackup).catch(console.error)},[]);
  const {colors,mode}=useTheme();const deletedCount=useNotebookStore(st=>st.deletedNotebooks.length);const refreshDeleted=useNotebookStore(st=>st.refreshDeleted);useEffect(()=>{void refreshDeleted().catch(console.error)},[refreshDeleted]);const theme=useSettingsStore(s=>s.theme),setTheme=useSettingsStore(s=>s.setTheme);
  const template=useSettingsStore(s=>s.defaultTemplate),setTemplate=useSettingsStore(s=>s.setDefaultTemplate);
  const paper=useSettingsStore(s=>s.defaultPaperColor),setPaper=useSettingsStore(s=>s.setDefaultPaperColor);
@@ -27,6 +29,7 @@ export default function SettingsScreen(){
  </View>
  {heading('DÜZEN')}<Pressable accessibilityRole="button" accessibilityLabel="Klasörleri yönet" onPress={()=>router.push('/(tabs)/folders')} style={{minHeight:56,backgroundColor:colors.surfaceRaised,borderRadius:16,paddingHorizontal:16,flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}><Text style={{color:colors.ink,fontSize:16}}>Klasörleri yönet</Text><ChevronRight color={colors.muted}/></Pressable>
  <Pressable accessibilityRole="button" accessibilityLabel="Silinenler" onPress={()=>router.push('/trash')} style={{minHeight:56,backgroundColor:colors.surfaceRaised,borderRadius:16,paddingHorizontal:16,marginTop:10,flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}><Text style={{color:colors.ink,fontSize:16}}>Silinenler</Text><View style={{flexDirection:'row',alignItems:'center',gap:12}}><Text style={{color:colors.muted}}>{deletedCount}</Text><ChevronRight color={colors.muted}/></View></Pressable>
+ <Pressable accessibilityRole="button" accessibilityLabel="Yedekle ve geri yükle" onPress={()=>router.push('/backup')} style={{minHeight:56,backgroundColor:colors.surfaceRaised,borderRadius:16,paddingHorizontal:16,marginTop:10,flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}><View><Text style={{color:colors.ink,fontSize:16}}>Yedekle ve geri yükle</Text><Text style={{color:colors.muted,fontSize:12}}>Son yedek: {lastBackup?new Date(lastBackup).toLocaleDateString('tr-TR'):'Henüz yok'}</Text></View><ChevronRight color={colors.muted}/></Pressable>
  {heading('HAKKINDA')}<View style={{backgroundColor:colors.surfaceRaised,borderRadius:16,padding:16,gap:8}}><Text style={{color:colors.ink,fontSize:16,fontWeight:'700'}}>Notex</Text><Text style={{color:colors.muted}}>Sürüm {Constants.expoConfig?.version??'1.0.0'}</Text><Text style={{color:colors.muted}}>Verilerin yalnızca bu cihazda saklanır.</Text></View>
  </ScrollView></SafeAreaView>
 }
