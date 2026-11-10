@@ -9,7 +9,8 @@ export type ShapeElement={id:string;type:'shape';z:number;createdAt:string;kind:
 export type TextElement={id:string;type:'text';z:number;createdAt:string;x:number;y:number;w:number;text:string;fontSize:number;color:string;bold:boolean;align:'left'|'center'|'right';erasures?:{points:number[];radius:number}[];bbox:Bounds};
 export type Element=StrokeElement|ShapeElement|TextElement;
 export type PageImage={id:string;uri:string;x:number;y:number;width:number;height:number;rotation?:number};
-export type BeautifiedWord={id:string;text:string;bbox:Bounds;baseline:number;fontSize:number;color:string;font:'Inter'|'InterBold'};
+export type HandwritingFont='Caveat'|'PatrickHand'|'DancingScript'|'Kalam';
+export type BeautifiedWord={id:string;text:string;bbox:Bounds;baseline:number;fontSize:number;color:string;font:'Inter'|'InterBold'|HandwritingFont};
 export type Beautification={sourceIds:string[];words:BeautifiedWord[];mode:'original'|'beautified'};
 export type PageContent={v:2;elements:Element[];images?:PageImage[];h?:number;beautifications?:Beautification[]};
 export const emptyContent=():PageContent=>({v:2,elements:[]});
