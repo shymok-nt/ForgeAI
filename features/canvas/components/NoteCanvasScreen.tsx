@@ -2,7 +2,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as Crypto from 'expo-crypto';
 import React,{useEffect,useRef,useState} from 'react';
-import {Alert,AppState,Modal,Pressable,ScrollView,Text,TextInput,View,useWindowDimensions} from 'react-native';
+import {Alert,AppState,BackHandler,Modal,Pressable,ScrollView,Text,TextInput,View,useWindowDimensions} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
 import {ArrowLeft,Undo2,Redo2,Ellipsis,Eye,Palette,ChevronLeft,ChevronRight,X,Move,RotateCw,Maximize2,Copy,Trash2,Minus,Plus} from 'lucide-react-native';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -101,7 +101,7 @@ export default function NoteCanvasScreen(){
  <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8}}>
  <View style={{flex:1,gap:3}}><Text style={{color:colors.ink,fontFamily:fonts.semibold,fontSize:14}}>Sayfaları düzenle</Text><Text style={{color:colors.muted,fontSize:12}}>{selectedPageIds.length} seçili · Sayfalara dokunarak seçimi değiştir</Text></View>
  <Pressable accessibilityRole="button" accessibilityLabel="Seçimi bitir" onPress={()=>{setMultiSelect(false);setSelectedPageIds([])}} style={{width:34,height:34,borderRadius:17,backgroundColor:colors.background,alignItems:'center',justifyContent:'center'}}><X size={18} color={colors.ink}/></Pressable></View>
- <View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>{([{label:'Sil',action:()=>confirmDelete(selectedPageIds),danger:true},{label:'Çoğalt',action:()=>void duplicatePages(selectedPageIds)},{label:'Başa taşı',action:()=>void moveSelected(false)},{label:'Sona taşı',action:()=>void moveSelected(true)}]).map(item=><Pressable key={item.label} accessibilityRole="button" disabled={!selectedPageIds.length} onPress={item.action} style={{paddingHorizontal:11,paddingVertical:9,borderRadius:10,borderWidth:1,borderColor:item.danger?colors.coral+'55':colors.border,backgroundColor:item.danger?colors.coral+'14':colors.background,opacity:selectedPageIds.length?1:0.4}}><Text style={{color:item.danger?colors.coral:colors.ink,fontSize:12,fontFamily:fonts.semibold}}>{item.label}</Text></Pressable>)}</View></View>:<View style={{paddingHorizontal:12,paddingVertical:8,borderBottomWidth:1,borderColor:colors.divider}}><Text style={{color:colors.muted,fontSize:11}}>Uzun bas: çoklu seçim · Basılı tutup sürükle: sırala</Text></View>;
+ <View style={{flexDirection:'row',flexWrap:'wrap',gap:6}}>{([{label:'Sil',action:()=>confirmDelete(selectedPageIds),danger:true},{label:'Çoğalt',action:()=>void duplicatePages(selectedPageIds)},{label:'Başa taşı',action:()=>void moveSelected(false)},{label:'Sona taşı',action:()=>void moveSelected(true)}]).map(item=><Pressable key={item.label} accessibilityRole="button" disabled={!selectedPageIds.length} onPress={item.action} style={{paddingHorizontal:11,paddingVertical:9,borderRadius:10,borderWidth:1,borderColor:item.danger?colors.coral+'55':colors.border,backgroundColor:item.danger?colors.coral+'14':colors.background,opacity:selectedPageIds.length?1:0.4}}><Text style={{color:item.danger?colors.coral:colors.ink,fontSize:12,fontFamily:fonts.semibold}}>{item.label}</Text></Pressable>)}</View></View>:null;
 
  const more=()=>{setPanel(null);setMoreOpen(true);};
  const moreItems=[
@@ -135,6 +135,15 @@ export default function NoteCanvasScreen(){
  const undoButton=control('Geri al',Undo2,()=>controllerRef.current?.back(),!controller?.canUndo);
  const redoButton=control('Yinele',Redo2,()=>controllerRef.current?.forward(),!controller?.canRedo);
  const status=controller?.error?'Kaydedilemedi, tekrar denenecek':controller?.saving?'Kaydediliyor…':'Kaydedildi';
+ useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{
+  if(templatePageId!==null){setTemplatePageId(null);return true}
+  if(moreOpen){setMoreOpen(false);return true}
+  if(sheet){if(multiSelect){setMultiSelect(false);setSelectedPageIds([])}else setSheet(false);return true}
+  if(multiSelect){setMultiSelect(false);setSelectedPageIds([]);return true}
+  if(panel){setPanel(null);return true}
+  if(focus){setFocus(false);return true}
+  return false;
+ });return()=>sub.remove()},[templatePageId,moreOpen,sheet,multiSelect,panel,focus]);
  const goBack=()=>{
   finalizeDelete();
   // The header must navigate immediately on desktop too: waiting for a
