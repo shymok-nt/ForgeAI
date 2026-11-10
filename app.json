@@ -1,4 +1,3 @@
-
 {
   "expo": {
     "name": "Notex",
@@ -24,7 +23,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#FFDA44"
-      }
+      },
+      "package": "com.notex.app"
     }
   }
 }
