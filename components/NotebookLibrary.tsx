@@ -3,6 +3,7 @@ import { FlatList,Modal,Pressable,SafeAreaView,ScrollView,StyleSheet,Text,View,u
 import { router } from 'expo-router';
 import Svg, { G, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { Check,Copy,Heart,MoreHorizontal,Plus,Search,Settings2,Trash2,X } from 'lucide-react-native';
+import { BackupReminder } from '@/components/BackupReminder';
 import { NotebookCard } from '@/components/NotebookCard';
 import { EmptyState } from '@/components/EmptyState';
 import { FolderChips } from '@/components/FolderChips';
@@ -41,6 +42,7 @@ export function NotebookLibrary({favorites=false}:{favorites?:boolean}){const {c
  </ScrollView>
  <Pressable accessibilityRole="button" accessibilityLabel="Seçimi iptal et" onPress={()=>setChecked([])} style={{width:40,height:44,alignItems:'center',justifyContent:'center'}}><X size={19} color={colors.ink}/></Pressable>
  </View>):<><View style={styles.sectionHeading}><View style={styles.sectionAccent}/><Text style={styles.sectionTitle}>{favorites?'Favori defterler':'Defterlerim'}</Text></View><View style={styles.countPill}><Text style={styles.count}>{data.length} defter</Text></View></>}</View>
+ {!favorites&&<BackupReminder/>}
  <FlatList key={`${columns}-${viewMode}`} style={{flex:1}} data={data} numColumns={columns} keyExtractor={n=>n.id} columnWrapperStyle={columns>1?{gap:20}:undefined} contentContainerStyle={data.length?{paddingBottom:120}:{flexGrow:1,paddingBottom:120,justifyContent:'center'}} renderItem={({item})=><View style={columns>1?{width:cardWidth,marginBottom:24}:{flex:1}}><NotebookCard notebook={item} width={cardWidth} viewMode={viewMode} onOpen={()=>open(item.id)} onOptions={()=>toggleChecked(item.id)} onMenu={()=>setSelected(item)} selected={checked.includes(item.id)}/></View>} ListEmptyComponent={<EmptyState/>}/>
 
  {!favorites&&<Pressable accessibilityRole="button" accessibilityLabel="Yeni defter" onPress={()=>editor()} style={styles.fab}><Plus size={28} strokeWidth={3} color={colors.surface}/></Pressable>}
