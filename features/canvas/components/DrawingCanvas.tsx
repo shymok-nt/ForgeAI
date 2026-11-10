@@ -132,7 +132,7 @@ const InlineTextEditor=memo(function InlineTextEditor({item,left,top,scale,onCom
  const longest=Math.max(0,...value.split('\n').map(line=>line.length));
  const width=Math.max(72,item.w*scale,Math.min((PAGE_WIDTH-item.x)*scale,longest*item.fontSize*scale*0.58+16));
  return <GestureDetector gesture={textGesture}><Animated.View style={{position:'absolute',left,top,width,minHeight:Math.max(minHeight,measuredHeight+8),borderWidth:1,borderColor:'#90959E',borderRadius:0,backgroundColor:'transparent',transform:drag.getTranslateTransform()}}>
-  {typing?<><TextInput multiline autoFocus scrollEnabled={false} value={value} onChangeText={next=>{valueRef.current=next;setValue(next);onValueChange(next)}} onContentSizeChange={e=>setMeasuredHeight(e.nativeEvent.contentSize.height)} onBlur={()=>setTyping(false)} underlineColorAndroid="transparent" style={{width:'100%',height:inputHeight,fontSize:item.fontSize*scale,lineHeight,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align,color:item.color,backgroundColor:'transparent',padding:0,paddingHorizontal:3,textAlignVertical:'top'}}/>{blankHeight>8&&<GestureDetector gesture={blankDrag}><View style={{height:blankHeight,width:'100%',backgroundColor:'transparent'}}/></GestureDetector>}</>:
+  {typing?<><TextInput multiline autoFocus scrollEnabled={false} value={value} onChangeText={next=>{valueRef.current=next;setValue(next);onValueChange(next)}} onContentSizeChange={e=>setMeasuredHeight(e.nativeEvent.contentSize.height)} onBlur={()=>{setTyping(false);onValueChange(valueRef.current)}} underlineColorAndroid="transparent" style={{width:'100%',height:inputHeight,fontSize:item.fontSize*scale,lineHeight,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align,color:item.color,backgroundColor:'transparent',padding:0,paddingHorizontal:3,textAlignVertical:'top'}}/>{blankHeight>8&&<GestureDetector gesture={blankDrag}><View style={{height:blankHeight,width:'100%',backgroundColor:'transparent'}}/></GestureDetector>}</>:
    <Text style={{minHeight:minHeight-4,paddingHorizontal:3,fontSize:item.fontSize*scale,lineHeight,color:item.color,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align}}>{value}</Text>}
  </Animated.View></GestureDetector>;
 });
@@ -748,7 +748,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
    drawing.value=false;
    runOnJS(notify)(false);return;
   }
-  if(!imageBounds.value&&!blocked.value&&tool!=='hand'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
+  if(!imageBounds.value&&!blocked.value&&tool!=='hand'&&tool!=='text'&&drawing.value&&samples.value.length){awaitingCommit.value=true;runOnJS(complete)(samples.value)}
   samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;cursorOn.value=false;runOnJS(notify)(false);
  }).onFinalize(()=>{samples.value=[];if(!awaitingCommit.value)draft.value='';drawing.value=false;blocked.value=false;cursorOn.value=false;draggingSelection.value=false;cornerActive.value=false;if(!dragPending.value&&!draggingSelection.value){/* Keep the last pose until the JS handoff mounts. */}}).runOnJS(false);
  const pinch=Gesture.Pinch().onBegin(e=>{
