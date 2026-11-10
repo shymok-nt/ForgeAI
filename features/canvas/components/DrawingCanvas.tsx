@@ -6,7 +6,7 @@ import {Inter_400Regular,Inter_700Bold} from '@expo-google-fonts/inter';
 import {useSettingsStore} from '@/store/settingsStore';
 import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
-import {groupInk} from '@/lib/ink/grouping';
+import {groupInkAsync} from '@/lib/ink/grouping';
 import {glyphOffsets,fitWordFont} from '@/lib/ink/naturalText';
 import {recognizeWords} from '@/lib/recognition/cloud';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement,type TextElement} from '@/features/canvas/types';
@@ -302,9 +302,10 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   }
   if(!source.length)return;
   let cancelled=false;
-  const grouped=groupInk(source);
   onRecognitionState?.(true,null);
   void (async()=>{
+   const grouped=await groupInkAsync(source);
+   if(cancelled)return;
    const flat=grouped.flatMap(line=>line.words);
    const recognized=await recognizeWords(flat,'tr');
    if(cancelled)return;
