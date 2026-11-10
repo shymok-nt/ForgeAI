@@ -1,4 +1,6 @@
 import * as Crypto from 'expo-crypto';
+import {File,Paths} from 'expo-file-system';
+import {deleteCoverFile} from '@/utils/files';
 import { getDatabase,withSafeTransaction } from '@/db/database';
 import type { Page } from '@/types/page';
 import type { PageTemplate,PaperColor } from '@/types/notebook';
@@ -38,6 +40,74 @@ export const pageRepository={
    const [item]=pages.splice(from,1);pages.splice(Math.max(0,Math.min(pages.length,newPosition)),0,item);
    for(let i=0;i<pages.length;i++)await tx.runAsync('UPDATE pages SET position=? WHERE id=?',i,pages[i].id);
    await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=?',now(),row.notebook_id);
+  });
+ },
+
+ async duplicateMany(ids:string[]){
+  const db=await getDatabase(),date=now(),created:string[]=[],copiedPaths:string[]=[];
+  const duplicateFile=(relative:string|null)=>{
+   if(!relative)return null;
+   const source=new File(Paths.document,relative);
+   if(!source.exists)throw new Error('Kopyalanacak görsel bulunamadı');
+   const extension=source.extension||'.png';
+   const path='page-assets/'+Crypto.randomUUID()+extension;
+   const dest=new File(Paths.document,path);
+   dest.parent.create({idempotent:true,intermediates:true});
+   source.copy(dest);copiedPaths.push(path);
+   return path;
+  };
+  try{
+   await withSafeTransaction(db,async tx=>{
+    const all=await tx.getAllAsync<PageRow>('SELECT * FROM pages WHERE notebook_id=(SELECT notebook_id FROM pages WHERE id=?) ORDER BY position',ids[0]);
+    const selected=new Set(ids),ordered=all.filter(p=>selected.has(p.id));
+    if(ordered.length!==selected.size)throw new Error('Seçili sayfalar bulunamadı');
+    const notebookId=all[0]?.notebook_id;
+    if(!notebookId)return;
+    const result: {id:string;position:number;source?:PageRow}[]=[];
+    for(const page of all){
+     result.push({id:page.id,position:result.length});
+     if(selected.has(page.id))result.push({id:Crypto.randomUUID(),position:result.length,source:page});
+    }
+    for(const item of result){
+     if(!item.source)continue;
+     const source=item.source;
+     const content=JSON.parse(source.content) as {elements?:{id:string}[];images?:{id:string;uri:string}[]};
+     if(Array.isArray(content.elements))content.elements=content.elements.map(e=>({...e,id:Crypto.randomUUID()}));
+     if(Array.isArray(content.images))content.images=content.images.map(image=>({...image,id:Crypto.randomUUID()}));
+     const thumbnail=duplicateFile(source.thumbnail_path);
+     await tx.runAsync('INSERT INTO pages(id,notebook_id,position,template,paper_color,content,thumbnail_path,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)',item.id,notebookId,item.position,source.template,source.paper_color,JSON.stringify(content),thumbnail,date,date);
+     created.push(item.id);
+    }
+    for(const item of result)await tx.runAsync('UPDATE pages SET position=? WHERE id=?',item.position,item.id);
+    await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=?',date,notebookId);
+   });
+   return created;
+  }catch(error){for(const path of copiedPaths)deleteCoverFile(path);throw error}
+ },
+ async removeMany(ids:string[]){
+  const db=await getDatabase(),date=now();
+  return withSafeTransaction(db,async tx=>{
+   const rows=await tx.getAllAsync<PageRow>('SELECT * FROM pages WHERE notebook_id=(SELECT notebook_id FROM pages WHERE id=?) ORDER BY position',ids[0]);
+   const selected=new Set(ids),removed=rows.filter(p=>selected.has(p.id));
+   if(removed.length!==selected.size)throw new Error('Seçili sayfalar bulunamadı');
+   if(removed.length>=rows.length)throw new Error('Defterde en az bir sayfa olmalı');
+   for(const page of removed)await tx.runAsync('DELETE FROM pages WHERE id=?',page.id);
+   const rest=rows.filter(p=>!selected.has(p.id));
+   for(let i=0;i<rest.length;i++)await tx.runAsync('UPDATE pages SET position=? WHERE id=?',i,rest[i].id);
+   await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=?',date,rows[0].notebook_id);
+   return removed.map(convert);
+  });
+ },
+ async restoreMany(pages:Page[]){
+  if(!pages.length)return;
+  const db=await getDatabase(),date=now(),notebookId=pages[0].notebookId;
+  await withSafeTransaction(db,async tx=>{
+   const existing=await tx.getAllAsync<{id:string;position:number}>('SELECT id,position FROM pages WHERE notebook_id=? ORDER BY position',notebookId);
+   const entries=[...existing.map(p=>({id:p.id,position:p.position,restored:false})),...pages.map(p=>({id:p.id,position:p.position,restored:true}))];
+   entries.sort((a,b)=>a.position-b.position||(a.restored?-1:1));
+   for(const page of pages)await tx.runAsync('INSERT INTO pages(id,notebook_id,position,template,paper_color,content,thumbnail_path,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)',page.id,page.notebookId,page.position,page.template,page.paperColor,page.content,page.thumbnailPath,page.createdAt,page.updatedAt);
+   for(let i=0;i<entries.length;i++)await tx.runAsync('UPDATE pages SET position=? WHERE id=?',i,entries[i].id);
+   await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=?',date,notebookId);
   });
  },
  async updateContent(pageId:string,content:string){const db=await getDatabase(),date=now();await withSafeTransaction(db,async tx=>{await tx.runAsync('UPDATE pages SET content=?,updated_at=? WHERE id=? AND EXISTS(SELECT 1 FROM notebooks WHERE notebooks.id=pages.notebook_id AND notebooks.deleted_at IS NULL)',content,date,pageId);await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=(SELECT notebook_id FROM pages WHERE id=?)',date,pageId)})},
