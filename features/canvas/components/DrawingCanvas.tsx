@@ -117,14 +117,16 @@ const InlineTextEditor=memo(function InlineTextEditor({item,left,top,scale,onCom
   .onEnd(e=>{dragCommitted.current=true;moveRef.current(e.translationX,e.translationY)})
   .onFinalize(()=>{if(!dragCommitted.current)drag.setValue({x:0,y:0})})
   .runOnJS(true),[drag]);
+ const tap=useMemo(()=>Gesture.Tap().maxDuration(250).maxDistance(12).onEnd(()=>setTyping(true)).runOnJS(true),[]);
+ const textGesture=useMemo(()=>Gesture.Exclusive(hold,tap),[hold,tap]);
  useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{commit();return true});return()=>sub.remove()},[]);
  const lineHeight=item.fontSize*1.3*scale;
  const minHeight=Math.max(48,lineHeight*3+8);
  const longest=Math.max(0,...value.split('\n').map(line=>line.length));
  const width=Math.max(72,item.w*scale,Math.min((PAGE_WIDTH-item.x)*scale,longest*item.fontSize*scale*0.58+16));
- return <GestureDetector gesture={hold}><Animated.View style={{position:'absolute',left,top,width,minHeight:Math.max(minHeight,measuredHeight+8),borderWidth:1,borderColor:'#4385DC',borderRadius:6,backgroundColor:'transparent',transform:drag.getTranslateTransform()}}>
+ return <GestureDetector gesture={textGesture}><Animated.View style={{position:'absolute',left,top,width,minHeight:Math.max(minHeight,measuredHeight+8),borderWidth:1,borderColor:'#4385DC',borderRadius:6,backgroundColor:'transparent',transform:drag.getTranslateTransform()}}>
   {typing?<TextInput multiline autoFocus scrollEnabled={false} value={value} onChangeText={next=>{setValue(next);onValueChange(next)}} onContentSizeChange={e=>setMeasuredHeight(e.nativeEvent.contentSize.height)} onBlur={()=>setTyping(false)} underlineColorAndroid="transparent" style={{width:'100%',minHeight:Math.max(minHeight-4,measuredHeight),fontSize:item.fontSize*scale,lineHeight,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align,color:item.color,backgroundColor:'transparent',padding:0,paddingHorizontal:3,textAlignVertical:'top'}}/>:
-   <Text onPress={()=>setTyping(true)} style={{minHeight:minHeight-4,paddingHorizontal:3,fontSize:item.fontSize*scale,lineHeight,color:item.color,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align}}>{value}</Text>}
+   <Text style={{minHeight:minHeight-4,paddingHorizontal:3,fontSize:item.fontSize*scale,lineHeight,color:item.color,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align}}>{value}</Text>}
  </Animated.View></GestureDetector>;
 });
 const paragraphAlign=(align:TextElement['align']):TextAlign=>align==='center'?TextAlign.Center:align==='right'?TextAlign.Right:TextAlign.Left;
