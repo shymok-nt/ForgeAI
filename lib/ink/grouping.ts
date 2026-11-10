@@ -28,3 +28,35 @@ export function groupInk(strokes:Stroke[]):InkLine[]{
   return {words,bbox:bounds(row),baseline:median(words.map(w=>w.bbox[3]))};
  }).sort((a,b)=>a.bbox[1]-b.bbox[1]);
 }
+
+/** Yield to the UI between bounded chunks; grouping remains deterministic. */
+export async function groupInkAsync(strokes:Stroke[],chunkSize=96):Promise<InkLine[]>{
+ if(strokes.length<=chunkSize)return groupInk(strokes);
+ const height=median(strokes.map(s=>Math.max(1,s.bbox[3]-s.bbox[1])));
+ const ordered=[...strokes].sort((a,b)=>(a.bbox[1]+a.bbox[3])-(b.bbox[1]+b.bbox[3]));
+ const rows:Stroke[][]=[];
+ const yieldFrame=()=>new Promise<void>(resolve=>setTimeout(resolve,0));
+ for(let i=0;i<ordered.length;i++){
+  const stroke=ordered[i],cy=(stroke.bbox[1]+stroke.bbox[3])/2;
+  let best:Stroke[]|undefined,distance=Infinity;
+  for(const row of rows){
+   const center=median(row.map(s=>(s.bbox[1]+s.bbox[3])/2));
+   const delta=Math.abs(center-cy);
+   if(delta<height*LINE_Y_FACTOR&&delta<distance){best=row;distance=delta}
+  }
+  if(best)best.push(stroke);else rows.push([stroke]);
+  if((i+1)%chunkSize===0)await yieldFrame();
+ }
+ const lines:InkLine[]=[];
+ for(let i=0;i<rows.length;i++){
+  const row=rows[i],words:InkWord[]=[];
+  for(const stroke of [...row].sort((a,b)=>a.bbox[0]-b.bbox[0])){
+   const last=words[words.length-1];
+   if(last&&stroke.bbox[0]-last.bbox[2]<height*WORD_GAP_FACTOR){last.strokes.push(stroke);last.bbox=bounds(last.strokes)}
+   else words.push({strokes:[stroke],bbox:[...stroke.bbox] as Bounds});
+  }
+  lines.push({words,bbox:bounds(row),baseline:median(words.map(w=>w.bbox[3]))});
+  if((i+1)%chunkSize===0)await yieldFrame();
+ }
+ return lines.sort((a,b)=>a.bbox[1]-b.bbox[1]);
+}
