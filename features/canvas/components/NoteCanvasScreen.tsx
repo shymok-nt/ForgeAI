@@ -2,7 +2,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as Crypto from 'expo-crypto';
 import React,{useEffect,useRef,useState} from 'react';
-import {Alert,Modal,Pressable,ScrollView,Text,View,useWindowDimensions} from 'react-native';
+import {Alert,AppState,Modal,Pressable,ScrollView,Text,View,useWindowDimensions} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
 import {ArrowLeft,Undo2,Redo2,Ellipsis,Eye,Palette,ChevronLeft,ChevronRight,X,Move,RotateCw,Maximize2,Copy,Trash2,Minus,Plus} from 'lucide-react-native';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -29,7 +29,9 @@ type CanvasController={back:()=>void;forward:()=>void;flush:()=>Promise<void>;ca
 export default function NoteCanvasScreen(){
  const {colors,scheme}=useTheme();const {id}=useLocalSearchParams<{id:string}>();const {width,height}=useWindowDimensions();const tablet=width>=600||width>height;
  const notebook=useNotebookStore(s=>s.notebooks.find(n=>n.id===id));
- const pages=usePageStore(s=>s.pages),load=usePageStore(s=>s.load),add=usePageStore(s=>s.add),remove=usePageStore(s=>s.remove),move=usePageStore(s=>s.move),changeTemplate=usePageStore(s=>s.updateTemplate);
+ const pages=usePageStore(s=>s.pages),load=usePageStore(s=>s.load),add=usePageStore(s=>s.add),remove=usePageStore(s=>s.remove),move=usePageStore(s=>s.move),changeTemplate=usePageStore(s=>s.updateTemplate),duplicateMany=usePageStore(s=>s.duplicateMany),removeMany=usePageStore(s=>s.removeMany),restoreMany=usePageStore(s=>s.restoreMany);
+ const [multiSelect,setMultiSelect]=useState(false),[selectedPageIds,setSelectedPageIds]=useState<string[]>([]),[pendingDelete,setPendingDelete]=useState<Page[]|null>(null);
+ const deleteTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const [selectedId,setSelectedId]=useState<string|null>(null),[tool,setTool]=useState<Tool>('pen'),[brush,setBrush]=useState<Brush>({color:'#1B1B2F',width:5,opacity:1});
  const [templatePageId,setTemplatePageId]=useState<string|null>(null);
  const [moreOpen,setMoreOpen]=useState(false);const [panel,setPanel]=useState<'tool'|'palette'|null>(null),[sheet,setSheet]=useState(false),[focus,setFocus]=useState(false),[eraserSize,setEraserSize]=useState(24),[eraserMode,setEraserMode]=useState<'pixel'|'stroke'>('pixel');
@@ -53,7 +55,38 @@ export default function NoteCanvasScreen(){
  const addPage=async()=>{await controllerRef.current?.flush();const count=pages.length;await add(index);const next=usePageStore.getState().pages;if(next.length>count)select(next[Math.min(index+1,next.length-1)].id)};
  const askRemove=(pageId:string)=>{if(pages.length<=1){Alert.alert('Son sayfa','Defterin son sayfası silinemez.');return}Alert.alert('Sayfayı sil','Bu sayfa silinsin mi?',[{text:'Vazgeç',style:'cancel'},{text:'Sil',style:'destructive',onPress:async()=>{await controllerRef.current?.flush();await remove(pageId);const next=usePageStore.getState().pages;if(pageId===selected?.id&&next.length)setSelectedId(next[Math.min(index,next.length-1)].id)}}])};
  const chooseTemplate=(pageId:string)=>{setTemplatePageId(pageId);};
- const pageActions=(pageId:string)=>Alert.alert('Sayfa işlemleri','İşlem seç',[{text:'Şablon',onPress:()=>chooseTemplate(pageId)},{text:'Yukarı taşı',onPress:()=>void move(pageId,Math.max(0,pages.findIndex(p=>p.id===pageId)-1))},{text:'Aşağı taşı',onPress:()=>void move(pageId,Math.min(pages.length-1,pages.findIndex(p=>p.id===pageId)+1))},{text:'Sil',style:'destructive',onPress:()=>askRemove(pageId)},{text:'Vazgeç',style:'cancel'}]);
+ const duplicatePages=async(ids:string[])=>{await controllerRef.current?.flush();const created=await duplicateMany(ids);if(created.length===1)select(created[0]);setMultiSelect(false);setSelectedPageIds([])};
+ const finalizeDelete=()=>{if(deleteTimer.current)clearTimeout(deleteTimer.current);deleteTimer.current=null;setPendingDelete(null)};
+ const deletePages=async(ids:string[])=>{
+  if(ids.length>=pages.length){Alert.alert('Silinemedi','Defterde en az bir sayfa olmalı');return}
+  await controllerRef.current?.flush();
+  finalizeDelete();
+  const removed=await removeMany(ids);
+  if(!removed.length)return;
+  const next=usePageStore.getState().pages;
+  if(!next.some(p=>p.id===selected?.id))setSelectedId(next[Math.min(index,next.length-1)]?.id??null);
+  setPendingDelete(removed);setMultiSelect(false);setSelectedPageIds([]);
+  deleteTimer.current=setTimeout(()=>{setPendingDelete(null);deleteTimer.current=null},5000);
+ };
+ const confirmDelete=(ids:string[])=>{
+  if(ids.length>=pages.length){Alert.alert('Silinemedi','Defterde en az bir sayfa olmalı');return}
+  Alert.alert('Sayfaları sil',`${ids.length} sayfa silinsin mi?`,[{text:'Vazgeç',style:'cancel'},{text:'Sil',style:'destructive',onPress:()=>void deletePages(ids)}]);
+ };
+ const undoDelete=async()=>{const saved=pendingDelete;if(!saved)return;finalizeDelete();try{await restoreMany(saved)}catch(error){Alert.alert('Geri alınamadı',error instanceof Error?error.message:'Tekrar dene')}};
+ useEffect(()=>{const sub=AppState.addEventListener('change',state=>{if(state!=='active')finalizeDelete()});return()=>{sub.remove();if(deleteTimer.current)clearTimeout(deleteTimer.current)}},[]);
+ const pageActions=(pageId:string)=>Alert.alert('Sayfa işlemleri','İşlem seç',[{text:'Şablon',onPress:()=>chooseTemplate(pageId)},{text:'Çoğalt',onPress:()=>void duplicatePages([pageId])},{text:'Sil',style:'destructive',onPress:()=>confirmDelete([pageId])},{text:'Vazgeç',style:'cancel'}]);
+ const togglePage=(pageId:string)=>setSelectedPageIds(current=>current.includes(pageId)?current.filter(id=>id!==pageId):[...current,pageId]);
+ const moveSelected=async(toEnd:boolean)=>{await controllerRef.current?.flush();const ids=pages.filter(p=>selectedPageIds.includes(p.id)).map(p=>p.id);for(const id of (toEnd?ids:[...ids].reverse()))await move(id,toEnd?pages.length-1:0);setMultiSelect(false);setSelectedPageIds([])};
+ const pageStripProps={pages,selectedId:selected?.id,colors,onSelect:select,onAdd:()=>void addPage(),onMove:(p:string,i:number)=>void move(p,i),onActions:pageActions,multiSelect,selectedPageIds,onToggle:togglePage};
+ const selectionBar=<View style={{paddingHorizontal:8,paddingVertical:6,flexDirection:'row',flexWrap:'wrap',alignItems:'center',gap:8,backgroundColor:colors.surfaceRaised}}>
+ <Pressable onPress={()=>{setMultiSelect(v=>!v);setSelectedPageIds([])}} style={{padding:8}}><Text style={{color:colors.accent}}>{multiSelect?'Bitti':'Seç'}</Text></Pressable>
+ {multiSelect&&<><Text style={{color:colors.ink}}>{selectedPageIds.length} seçili</Text>
+ <Pressable disabled={!selectedPageIds.length} onPress={()=>confirmDelete(selectedPageIds)} style={{padding:8}}><Text style={{color:colors.coral}}>Sil</Text></Pressable>
+ <Pressable disabled={!selectedPageIds.length} onPress={()=>void duplicatePages(selectedPageIds)} style={{padding:8}}><Text style={{color:colors.accent}}>Çoğalt</Text></Pressable>
+ <Pressable disabled={!selectedPageIds.length} onPress={()=>void moveSelected(false)} style={{padding:8}}><Text style={{color:colors.accent}}>Başa</Text></Pressable>
+ <Pressable disabled={!selectedPageIds.length} onPress={()=>void moveSelected(true)} style={{padding:8}}><Text style={{color:colors.accent}}>Sona</Text></Pressable></>}
+ </View>;
+
  const more=()=>{setPanel(null);setMoreOpen(true);};
  const moreItems=[
   {label:'Şablonu değiştir',onPress:()=>selected&&chooseTemplate(selected.id)},
@@ -86,6 +119,7 @@ export default function NoteCanvasScreen(){
  const redoButton=control('Yinele',Redo2,()=>controllerRef.current?.forward(),!controller?.canRedo);
  const status=controller?.error?'Kaydedilemedi, tekrar denenecek':controller?.saving?'Kaydediliyor…':'Kaydedildi';
  const goBack=()=>{
+  finalizeDelete();
   // The header must navigate immediately on desktop too: waiting for a
   // pending autosave can leave the arrow apparently unresponsive.
   void controllerRef.current?.flush().catch(error=>console.error('Canvas save before navigation failed:',error));
@@ -109,7 +143,7 @@ export default function NoteCanvasScreen(){
  {selectedDeleteButton}{undoButton}{redoButton}{control('Diğer',Ellipsis,more)}{tablet&&control('Odak modu',Eye,()=>setFocus(true))}
  </View>}
  <View style={{flex:1,flexDirection:'row'}}>
- {tablet&&!focus&&<View style={{width:132,backgroundColor:colors.background,borderRightWidth:1,borderRightColor:colors.divider}}><CanvasPageStrip tablet pages={pages} selectedId={selected?.id} colors={colors} onSelect={select} onAdd={()=>void addPage()} onRemove={askRemove} onMove={(p,i)=>void move(p,i)} onActions={pageActions}/></View>}
+ {tablet&&!focus&&<View style={{width:132,backgroundColor:colors.background,borderRightWidth:1,borderRightColor:colors.divider}}>{selectionBar}<CanvasPageStrip tablet {...pageStripProps}/></View>}
  <View style={{flex:1,marginHorizontal:0,marginTop:0,marginBottom:0,borderRadius:0,overflow:'hidden'}}>
  {selected?<CanvasPage key={selected.id} page={selected} tool={tool} brush={brush} eraserSize={eraserSize} eraserMode={eraserMode} onController={setController} onHistory={()=>{}} onDrawStart={()=>setPanel(null)} shapeKind={shapeKind} shapeFill={shapeFill} textStyle={textStyle} onSelectionChange={setSelectedElements} onTextSelectionChange={setSelectedText} selectionAction={selectionAction} imageRequest={imageRequest} imageAction={imageAction} onImageSelectionChange={setSelectedImageId}/>:<Text style={{color:ink}}>Sayfalar yükleniyor…</Text>}
  </View>
@@ -118,10 +152,11 @@ export default function NoteCanvasScreen(){
  {!tablet&&!focus&&<View style={{position:'absolute',bottom:28,left:12,right:12}}><CanvasToolbar tablet={false} tool={tool} colors={colors} onTool={chooseTool} onPages={()=>setSheet(true)} onImage={()=>void insertImage()} toolPanel={toolPanel} panelOpen={panel==='tool'} onClosePanel={()=>setPanel(null)}/></View>}
 
  
+ {pendingDelete&&<View style={{position:'absolute',bottom:tablet?18:170,left:16,right:16,backgroundColor:colors.surfaceRaised,padding:12,borderRadius:12,flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}><Text style={{color:ink}}>{pendingDelete.length} sayfa silindi</Text><Pressable onPress={()=>void undoDelete()}><Text style={{color:colors.accent}}>Geri al</Text></Pressable></View>}
  {ruler&&<View pointerEvents="none" style={{position:'absolute',top:'45%',left:'15%',width:'70%',height:64,backgroundColor:colors.accent+'55',borderWidth:1,borderColor:colors.accent,borderRadius:6,justifyContent:'center',alignItems:'center'}}><Text style={{color:ink}}>0°   | | | | | | | | | | | |</Text></View>}
  {popover}
  </View>
- <Modal visible={sheet} transparent animationType="slide" onRequestClose={()=>setSheet(false)}><View style={{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay}}><View style={{backgroundColor:colors.surfaceRaised,borderTopLeftRadius:24,borderTopRightRadius:24,paddingBottom:28,maxHeight:height*0.65}}><View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingHorizontal:16,paddingTop:12}}><Text style={{fontFamily:fonts.heading,fontSize:20,color:ink}}>Sayfalar</Text>{control('Kapat',X,()=>setSheet(false))}</View><CanvasPageStrip tablet={false} pages={pages} selectedId={selected?.id} colors={colors} onSelect={select} onAdd={()=>void addPage()} onRemove={askRemove} onMove={(p,i)=>void move(p,i)} onActions={pageActions}/></View></View></Modal>
+ <Modal visible={sheet} transparent animationType="slide" onRequestClose={()=>setSheet(false)}><View style={{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay}}><View style={{backgroundColor:colors.surfaceRaised,borderTopLeftRadius:24,borderTopRightRadius:24,paddingBottom:28,maxHeight:height*0.65}}><View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingHorizontal:16,paddingTop:12}}><Text style={{fontFamily:fonts.heading,fontSize:20,color:ink}}>Sayfalar</Text>{control('Kapat',X,()=>setSheet(false))}</View>{selectionBar}<CanvasPageStrip tablet={false} {...pageStripProps}/></View></View></Modal>
  <Modal visible={templatePageId!==null} transparent animationType="fade" onRequestClose={()=>setTemplatePageId(null)}>
  <View style={{flex:1,justifyContent:'center',paddingHorizontal:20,backgroundColor:colors.overlay}}>
  <Pressable accessibilityRole="button" accessibilityLabel="Şablon seçimini kapat" onPress={()=>setTemplatePageId(null)} style={{position:'absolute',top:0,bottom:0,left:0,right:0}}/>
