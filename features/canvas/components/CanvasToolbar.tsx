@@ -11,7 +11,7 @@ export const tools:{id:UiTool;label:string;icon:typeof Pen;enabled:boolean}[]=[
  {id:'eraser',label:'Silgi',icon:Eraser,enabled:true},
  {id:'select',label:'Seç ve taşı',icon:Move,enabled:true},
  {id:'shape',label:'Şekil',icon:Shapes,enabled:true},
- {id:'text',label:'Metin',icon:Type,enabled:false},
+ {id:'text',label:'Metin',icon:Type,enabled:true},
  {id:'image',label:'Resim',icon:ImageIcon,enabled:true},
  {id:'hand',label:'Kaydırma',icon:Hand,enabled:true},
  {id:'pages',label:'Sayfalar',icon:PanelsTopLeft,enabled:true}
