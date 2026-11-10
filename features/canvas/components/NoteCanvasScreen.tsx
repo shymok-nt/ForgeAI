@@ -4,6 +4,7 @@ import * as Crypto from 'expo-crypto';
 import React,{useEffect,useRef,useState} from 'react';
 import {Alert,AppState,BackHandler,Modal,Pressable,ScrollView,Text,TextInput,View,useWindowDimensions} from 'react-native';
 import {router,useLocalSearchParams} from 'expo-router';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {ArrowLeft,Undo2,Redo2,Ellipsis,Eye,Palette,ChevronLeft,ChevronRight,X,Move,RotateCw,Maximize2,Copy,Trash2,Minus,Plus} from 'lucide-react-native';
 import {useTheme} from '@/theme/ThemeProvider';
 import {fonts} from '@/theme/fonts';
@@ -183,7 +184,7 @@ export default function NoteCanvasScreen(){
  {ruler&&<View pointerEvents="none" style={{position:'absolute',top:'45%',left:'15%',width:'70%',height:64,backgroundColor:colors.accent+'55',borderWidth:1,borderColor:colors.accent,borderRadius:6,justifyContent:'center',alignItems:'center'}}><Text style={{color:ink}}>0°   | | | | | | | | | | | |</Text></View>}
  {popover}
  </View>
- <Modal visible={sheet} transparent animationType="slide" onRequestClose={()=>setSheet(false)}><View style={{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay}}><View style={{backgroundColor:colors.surfaceRaised,borderTopLeftRadius:24,borderTopRightRadius:24,paddingBottom:28,maxHeight:height*0.65}}><View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingHorizontal:16,paddingTop:12}}><Text style={{fontFamily:fonts.heading,fontSize:20,color:ink}}>Sayfalar</Text>{control('Kapat',X,()=>setSheet(false))}</View>{selectionBar}<CanvasPageStrip tablet={false} {...pageStripProps}/></View></View></Modal>
+ <Modal visible={sheet} transparent animationType="slide" onRequestClose={()=>{if(multiSelect){setMultiSelect(false);setSelectedPageIds([])}else setSheet(false)}}><GestureHandlerRootView style={{flex:1}}><View style={{flex:1,justifyContent:'flex-end',backgroundColor:colors.overlay}}><View style={{backgroundColor:colors.surfaceRaised,borderTopLeftRadius:24,borderTopRightRadius:24,paddingBottom:28,maxHeight:height*0.65}}><View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingHorizontal:16,paddingTop:12}}><Text style={{fontFamily:fonts.heading,fontSize:20,color:ink}}>Sayfalar</Text>{control('Kapat',X,()=>setSheet(false))}</View>{selectionBar}<CanvasPageStrip tablet={false} {...pageStripProps}/></View></View></GestureHandlerRootView></Modal>
  <Modal visible={templatePageId!==null} transparent animationType="fade" onRequestClose={()=>setTemplatePageId(null)}>
  <View style={{flex:1,justifyContent:'center',paddingHorizontal:20,backgroundColor:colors.overlay}}>
  <Pressable accessibilityRole="button" accessibilityLabel="Şablon seçimini kapat" onPress={()=>setTemplatePageId(null)} style={{position:'absolute',top:0,bottom:0,left:0,right:0}}/>
