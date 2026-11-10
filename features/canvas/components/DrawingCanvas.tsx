@@ -234,8 +234,16 @@ export function DrawingCanvas({fontDebugVersion,content,template,paperColor,tool
  const interFonts=useFonts({Inter:[Inter_400Regular],InterBold:[Inter_700Bold]});
  const handwriting=useHandwritingFonts();
  const fontFailureLogged=useRef(false);
- useEffect(()=>{if(!handwriting.families&&!fontFailureLogged.current){fontFailureLogged.current=true;console.error('[Notex] El yazısı fontları Skia useFonts ile yüklenemedi. Sistem fontuna sessiz geçiş yapılmayacak.')}},[handwriting.families]);
+ useEffect(()=>{if(handwriting.families)return;const timeout=setTimeout(()=>{if(!fontFailureLogged.current){fontFailureLogged.current=true;console.error('[Notex] El yazısı fontları Skia useFonts ile yüklenemedi. Sistem fontuna sessiz geçiş yapılmayacak.')}},5000);return()=>clearTimeout(timeout)},[handwriting.families]);
  useEffect(()=>{if(!fontDebugVersion)return;for(const font of ['Caveat','PatrickHand','DancingScript'] as const){console.log('[Notex font test]',font,TURKISH_FONT_TEST,handwriting.loaded[font]?'loaded':'NOT LOADED',handwriting.missingGlyphs(font))}},[fontDebugVersion,handwriting.families]);
+ const debugParagraph=useMemo(()=>{
+  if(!fontDebugVersion||!handwriting.families)return null;
+  const builder=Skia.ParagraphBuilder.Make({},handwriting.families);
+  builder.pushStyle({fontFamilies:['Caveat'],fontSize:36,color:Skia.Color('#202020')});
+  builder.addText(TURKISH_FONT_TEST);builder.pop();
+  const paragraph=builder.build();paragraph.layout(PAGE_WIDTH-40);
+  return paragraph;
+ },[fontDebugVersion,handwriting.families]);
  const [editing,setEditing]=useState<TextElement|null>(null);
  const pendingCloseRef=useRef<{id:string;text:string;remove:boolean}|null>(null);
  const [,setKeyboardLayoutTick]=useState(0);
@@ -950,9 +958,10 @@ export function DrawingCanvas({fontDebugVersion,content,template,paperColor,tool
  <Group transform={transform}>
  <StaticPaper template={template} paperColor={paperColor} pageHeight={pageHeight} fitWidth={fitWidth}/>
  {(content.images??[]).map(source=>{const item=source.id===displayImageId&&paintedImage?paintedImage:source;const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/>{Platform.OS==='web'&&<><Line p1={vec(cx,item.y)} p2={imageRotatePoint} color="#3388EE" strokeWidth={imageOutlineWidth}/><Circle cx={cx} cy={imageRotateY} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={cx} cy={imageRotateY} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></>}{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={x} cy={y} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></Group>)}</>}</Group>;return item.id===displayImageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
+ {debugParagraph&&<Group><Rect x={12} y={12} width={PAGE_WIDTH-24} height={70} color="#FFFFFF"/><Paragraph paragraph={debugParagraph} x={20} y={18} width={PAGE_WIDTH-40}/></Group>}
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={editing?[editing.id]:tool==='select'?selectedIds:undefined} fonts={interFonts}/>
-  {(content.beautifications??[]).filter(b=>b.mode==='beautified').flatMap(b=>b.words).map(word=><NaturalWord key={word.id} fonts={handwriting.families} word={word}/>)} 
+  {(content.beautifications??[]).filter(b=>b.mode==='beautified').flatMap(b=>b.words).map(word=><NaturalWord key={word.id} fonts={word.font==='Inter'||word.font==='InterBold'?interFonts:handwriting.families} word={word}/>)} 
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
  {tool==='select'&&paintedFrame&&<Group transform={selectionTransform}>
