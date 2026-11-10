@@ -50,7 +50,8 @@ export function pixelErase(elements:Element[],path:P[],radius:number,wholeStroke
  for(const e of elements){
   if(!overlaps(e.bbox,eraserBox)){result.push(e);continue}
   if(e.type==='text'){
-   if(wholeStroke){
+   // Text is atomic: either eraser mode removes the entire text element on contact.
+   {
     const [left,top,right,bottom]=e.bbox;
     const touches=(p:P)=>p[0]>=left-radius&&p[0]<=right+radius&&p[1]>=top-radius&&p[1]<=bottom+radius;
     let hit=path.some(touches);
