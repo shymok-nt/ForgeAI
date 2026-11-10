@@ -6,11 +6,11 @@ type PageRow={id:string;notebook_id:string;position:number;template:PageTemplate
 const convert=(r:PageRow):Page=>({id:r.id,notebookId:r.notebook_id,position:r.position,template:r.template,paperColor:r.paper_color,content:r.content,thumbnailPath:r.thumbnail_path,createdAt:r.created_at,updatedAt:r.updated_at});
 const now=()=>new Date().toISOString();
 export const pageRepository={
- async getByNotebook(notebookId:string){const db=await getDatabase();const rows=await db.getAllAsync<PageRow>('SELECT * FROM pages WHERE notebook_id=? ORDER BY position',notebookId);return rows.map(convert);},
+ async getByNotebook(notebookId:string){const db=await getDatabase();const rows=await db.getAllAsync<PageRow>('SELECT * FROM pages WHERE notebook_id=? AND EXISTS(SELECT 1 FROM notebooks WHERE id=? AND deleted_at IS NULL) ORDER BY position',notebookId,notebookId);return rows.map(convert);},
  async add(notebookId:string,afterPosition?:number){
   const db=await getDatabase(),id=Crypto.randomUUID(),date=now();
   await withSafeTransaction(db,async tx=>{
-   const notebook=await tx.getFirstAsync<{template:PageTemplate;paper_color:PaperColor}>('SELECT template,paper_color FROM notebooks WHERE id=?',notebookId);
+   const notebook=await tx.getFirstAsync<{template:PageTemplate;paper_color:PaperColor}>('SELECT template,paper_color FROM notebooks WHERE id=? AND deleted_at IS NULL',notebookId);
    if(!notebook)throw new Error('Defter bulunamadı');
    const count=await tx.getFirstAsync<{n:number}>('SELECT COUNT(*) AS n FROM pages WHERE notebook_id=?',notebookId);
    const position=afterPosition===undefined?count!.n:Math.max(0,Math.min(count!.n,afterPosition+1));
@@ -40,7 +40,7 @@ export const pageRepository={
    await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=?',now(),row.notebook_id);
   });
  },
- async updateContent(pageId:string,content:string){const db=await getDatabase(),date=now();await withSafeTransaction(db,async tx=>{await tx.runAsync('UPDATE pages SET content=?,updated_at=? WHERE id=?',content,date,pageId);await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=(SELECT notebook_id FROM pages WHERE id=?)',date,pageId)})},
+ async updateContent(pageId:string,content:string){const db=await getDatabase(),date=now();await withSafeTransaction(db,async tx=>{await tx.runAsync('UPDATE pages SET content=?,updated_at=? WHERE id=? AND EXISTS(SELECT 1 FROM notebooks WHERE notebooks.id=pages.notebook_id AND notebooks.deleted_at IS NULL)',content,date,pageId);await tx.runAsync('UPDATE notebooks SET updated_at=? WHERE id=(SELECT notebook_id FROM pages WHERE id=?)',date,pageId)})},
  async updateTemplate(pageId:string,template:PageTemplate,paperColor:PaperColor){
   const db=await getDatabase(),date=now();await withSafeTransaction(db,async tx=>{
    await tx.runAsync('UPDATE pages SET template=?,paper_color=?,updated_at=? WHERE id=?',template,paperColor,date,pageId);
