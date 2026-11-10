@@ -1,5 +1,5 @@
 import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
-import {View,PixelRatio,Platform,TextInput,Keyboard,BackHandler,type LayoutChangeEvent} from 'react-native';
+import {View,PixelRatio,Platform,TextInput,BackHandler,type LayoutChangeEvent} from 'react-native';
 import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,Skia,vec,Paragraph,useFonts} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector,PointerType} from 'react-native-gesture-handler';
 import {useSettingsStore} from '@/store/settingsStore';
@@ -157,13 +157,13 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const next={...current,text:value,bbox:[current.x,current.y,current.x+current.w,current.y+height] as [number,number,number,number]};
   const elements=content.elements.filter(e=>e.id!==current.id);
   if(value.trim())elements.push(next);
-  onChange({...content,elements});
+  if(current.text!==value || (!current.text && value.trim()))onChange({...content,elements});
  };
  const finishRef=useRef(finishText);finishRef.current=finishText;
  useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{if(!editingRef.current)return false;finishRef.current();return true});return()=>sub.remove()},[]);
  const beginText=(x:number,y:number)=>{
   const hit=[...content.elements].reverse().find(e=>e.type==='text'&&x>=e.bbox[0]&&x<=e.bbox[2]&&y>=e.bbox[1]&&y<=e.bbox[3]) as TextElement|undefined;
-  const current=hit??{id:Crypto.randomUUID(),type:'text' as const,z:content.elements.length,createdAt:new Date().toISOString(),x,y,w:Math.min(560,PAGE_WIDTH-x),text:'',fontSize:textStyle.fontSize,color:textStyle.color,bold:textStyle.bold,align:textStyle.align,bbox:[x,y,x+Math.min(560,PAGE_WIDTH-x),y+textStyle.fontSize*1.25] as [number,number,number,number]};
+  const current=hit??{id:Crypto.randomUUID(),type:'text' as const,z:content.elements.length,createdAt:new Date().toISOString(),x,y,w:Math.max(120,Math.min(560,PAGE_WIDTH-x)),text:'',fontSize:textStyle.fontSize,color:textStyle.color,bold:textStyle.bold,align:textStyle.align,bbox:[x,y,x+Math.max(120,Math.min(560,PAGE_WIDTH-x)),y+textStyle.fontSize*1.25] as [number,number,number,number]};
   editingRef.current=current;draftTextRef.current=current.text;setDraftText(current.text);setEditing(current);
  };
  const penSettings=useSettingsStore(state=>state.penSettings);
@@ -565,7 +565,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
     return;
    }
   }
-  if(tool==='text'){samples.value=[];drawing.value=false;draft.value='';blocked.value=true;return;}
+  if(tool==='text'){samples.value=[];drawing.value=false;draft.value='';blocked.value=false;return;}
   if(tool==='select'){
    samples.value=[pagePoint(e.x,e.y)];drawing.value=false;draft.value='';
    return;
