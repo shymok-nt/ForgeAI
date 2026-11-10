@@ -59,16 +59,26 @@ export default function BackupScreen(){
    if(!asset.file)throw new Error('Bu dosya okunamadı');
    bytes=new Uint8Array(await asset.file.arrayBuffer());
   }else if(Platform.OS==='android'){
-   // Android's document provider may return content:// URIs that File.bytes cannot read.
-   // Legacy readAsStringAsync supports content URIs and reads the selected ZIP as base64.
+   // The Android picker may return a content:// URI. First copy it into app-owned
+   // cache; File.bytes() is only reliable for an app-readable local file.
+   const localUri=LegacyFileSystem.cacheDirectory+'notex-import-'+Date.now()+'.zip';
    try{
-    const encoded=await LegacyFileSystem.readAsStringAsync(asset.uri,{encoding:LegacyFileSystem.EncodingType.Base64});
-    const binary=atob(encoded);
-    bytes=new Uint8Array(binary.length);
-    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-   }catch(error){
-    console.warn('Seçilen yedek okunamadı',error);
-    throw new Error('Bu dosya okunamadı. Dosyayı İndirilenler klasöründen tekrar seç.');
+    await LegacyFileSystem.copyAsync({from:asset.uri,to:localUri});
+    bytes=await new File(localUri).bytes();
+   }catch(copyError){
+    // Some document providers disallow copyAsync; read their content URI directly.
+    try{
+     const encoded=await LegacyFileSystem.readAsStringAsync(asset.uri,{encoding:LegacyFileSystem.EncodingType.Base64});
+     const binary=atob(encoded);
+     bytes=new Uint8Array(binary.length);
+     for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    }catch(readError){
+     console.error('Android yedek dosyası kopyalanamadı',copyError);
+     console.error('Android yedek dosyası okunamadı',readError);
+     throw new Error('Android dosya sağlayıcısı yedeğe okuma izni vermedi. Dosyayı İndirilenler klasörüne taşıyıp tekrar seç.');
+    }
+   }finally{
+    await LegacyFileSystem.deleteAsync(localUri,{idempotent:true}).catch(()=>{});
    }
   }else bytes=await new File(asset.uri).bytes();
   const {manifest}=await inspectBackup(bytes);
