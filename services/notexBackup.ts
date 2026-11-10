@@ -77,9 +77,18 @@ export async function importBackup(bytes:Uint8Array,progress:Progress){
   if(!Array.isArray(data.folders)||!Array.isArray(data.notebooks)||!Array.isArray(data.pages)||!Array.isArray(data.settings))throw Error('invalid data');
   const db=await getDatabase();
   const folderMap=new Map<string,string>(),notebookMap=new Map<string,string>();
-  const existingFolders=await db.getAllAsync<{id:string}>('SELECT id FROM folders');
+  const existingFolders=await db.getAllAsync<{id:string;name:string}>('SELECT id,name FROM folders');
   const folderIds=new Set(existingFolders.map(f=>f.id));
-  for(const f of data.folders){const id=folderIds.has(f.id)?Crypto.randomUUID():f.id;folderMap.set(f.id,id);folderIds.add(id)}
+  const folderNames=new Map(existingFolders.map(f=>[f.name.trim().toLocaleLowerCase('tr-TR'),f.id]));
+  const newFolders:Folder[]=[];
+  for(const f of data.folders){
+   const name=f.name.trim();if(!name)throw Error('invalid folder name');
+   const normalized=name.toLocaleLowerCase('tr-TR');
+   const existing=folderNames.get(normalized);
+   if(existing){folderMap.set(f.id,existing);continue}
+   const id=folderIds.has(f.id)?Crypto.randomUUID():f.id;
+   folderMap.set(f.id,id);folderIds.add(id);folderNames.set(normalized,id);newFolders.push({...f,id,name});
+  }
   for(const n of data.notebooks)notebookMap.set(n.id,Crypto.randomUUID());
   const fileMap=new Map<string,string>();
   const paths=new Set<string>();
@@ -103,8 +112,8 @@ export async function importBackup(bytes:Uint8Array,progress:Progress){
    i++;progress('Resimler geri yükleniyor…',Math.round(50*i/Math.max(1,paths.size)));await yieldUI();
   }
   await withSafeTransaction(db,async tx=>{
-   for(const f of data.folders){
-    await tx.runAsync('INSERT INTO folders(id,name,position,created_at) VALUES(?,?,?,?)',folderMap.get(f.id)!,f.name,f.position,f.created_at);
+   for(const f of newFolders){
+    await tx.runAsync('INSERT INTO folders(id,name,position,created_at) VALUES(?,?,?,?)',f.id,f.name,f.position,f.created_at);
    }
    for(const n of data.notebooks){
     await tx.runAsync('INSERT INTO notebooks(id,title,folder_id,cover_type,cover_color,cover_image_path,cover_preset_id,show_title_on_cover,template,paper_color,favorite,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)',notebookMap.get(n.id)!,n.title,n.folder_id?folderMap.get(n.folder_id)??null:null,n.cover_type,n.cover_color,n.cover_image_path?fileMap.get(n.cover_image_path)??null:null,n.cover_preset_id,n.show_title_on_cover,n.template,n.paper_color,n.favorite,n.created_at,n.updated_at);
