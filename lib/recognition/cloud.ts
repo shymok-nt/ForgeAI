@@ -55,7 +55,11 @@ export async function recognizeWords(words:InkWord[],lang='tr'):Promise<string[]
  if(missing.length){
   const url=apiUrl();
   if(!url)throw new Error('El yazısı tanıma servisi ayarlanmamış. EXPO_PUBLIC_API_URL değerini kontrol edin.');
-  const images=missing.map(index=>wordToPng(words[index]));
+  const images:string[]=[];
+  for(let i=0;i<missing.length;i++){
+   images.push(wordToPng(words[missing[i]]));
+   if((i+1)%8===0)await new Promise<void>(resolve=>setTimeout(resolve,0));
+  }
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),30000);
   let response:Response;
