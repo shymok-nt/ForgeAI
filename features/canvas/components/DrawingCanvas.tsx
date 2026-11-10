@@ -151,7 +151,7 @@ const Completed=memo(function Completed({content,hiddenIds,fonts}:{content:PageC
  return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)).map(element=>element.type==='text'?<TextLayer key={element.id} element={element} fonts={fonts}/>:<StrokeLayer key={element.id} element={element}/>)}</>;
 });
 export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false,onImageSelectionChange,imageAction,textStyle={fontSize:48,color:'#1B1B2F',bold:false,align:'left'}}:Props){
- const interFonts=useFonts({Inter:Inter_400Regular,InterBold:Inter_700Bold});
+ const interFonts=useFonts({Inter:[Inter_400Regular],InterBold:[Inter_700Bold]});
  const [editing,setEditing]=useState<TextElement|null>(null);
  const [,setKeyboardLayoutTick]=useState(0);
 
