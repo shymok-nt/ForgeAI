@@ -1,5 +1,5 @@
 import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
-import {View,PixelRatio,Platform,TextInput,BackHandler,Keyboard,Animated,Text,type LayoutChangeEvent} from 'react-native';
+import {View,PixelRatio,Platform,TextInput,BackHandler,Keyboard,Animated,Text,Modal,Pressable,type LayoutChangeEvent} from 'react-native';
 import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,Skia,vec,Paragraph,useFonts,TextAlign} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector,PointerType} from 'react-native-gesture-handler';
 import {Inter_400Regular,Inter_700Bold} from '@expo-google-fonts/inter';
@@ -287,6 +287,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   editingRef.current=current;editValueRef.current=current.text;setEditing(current);
  };
  const penSettings=useSettingsStore(state=>state.penSettings);
+ const [wordEditing,setWordEditing]=useState<{id:string;text:string}|null>(null);
  const [selectedIds,setSelectedIds]=useState<string[]>([]);
  const selectedRef=useRef<string[]>([]);selectedRef.current=selectedIds;
  useEffect(()=>{
@@ -536,6 +537,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const endStroke=(points:Sample[])=>{if(!points.length)return;
  if(tool==='select'){
   awaitingCommit.value=false;draft.value='';
+  if(points.length<=3){
+   const p=points[0];
+   const word=(content.beautifications??[]).filter(b=>b.mode==='beautified').flatMap(b=>b.words).find(w=>p[0]>=w.bbox[0]-8&&p[0]<=w.bbox[2]+8&&p[1]>=w.bbox[1]-8&&p[1]<=w.bbox[3]+8);
+   if(word){setWordEditing({id:word.id,text:word.text});return}
+  }
   const poly=points.flatMap(p=>[p[0],p[1]]);
   const ids=lassoSelect(content.elements,poly);
   if(!ids.length&&points.length<=3){const p=points[0];const hit=content.elements.filter(e=>p[0]>=e.bbox[0]-12&&p[0]<=e.bbox[2]+12&&p[1]>=e.bbox[1]-12&&p[1]<=e.bbox[3]+12).at(-1);if(hit)ids.push(hit.id)}
@@ -940,5 +946,5 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  </Group>}
  {tool!=='eraser'&&tool!=='select'&&<Path path={draft} color={brush.color} opacity={brush.opacity} blendMode={tool==='highlighter'?'multiply':'srcOver'} style="stroke" strokeWidth={brush.width} strokeCap="round" strokeJoin="round"/>}
  {tool==='eraser'&&<Circle cx={cursorX} cy={cursorY} r={eraserRadius} color="#808080" opacity={cursorOpacity} style="stroke" strokeWidth={1.5}/>}
- </Group></Canvas></View></GestureDetector>{editing&&<InlineTextEditor key={editing.id} item={editing} left={(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value+editing.x*fitWidth*zoom.value} top={offsetY.value+editing.y*fitWidth*zoom.value} scale={fitWidth*zoom.value} onCommit={value=>{editValueRef.current=value;finishRef.current()}} onValueChange={value=>{editValueRef.current=value}} onMove={(dx,dy)=>{const current=editingRef.current;if(!current)return;const scale=fitWidth*zoom.value;const x=Math.max(0,Math.min(PAGE_WIDTH-current.w,current.x+dx/scale));const y=Math.max(0,current.y+dy/scale);const next={...current,x,y,bbox:[x,y,x+current.w,y+(current.bbox[3]-current.bbox[1])] as [number,number,number,number]};editingRef.current=next;setEditing(next)}}/>}</View>;
+ </Group></Canvas></View></GestureDetector>{editing&&<InlineTextEditor key={editing.id} item={editing} left={(size.width-PAGE_WIDTH*fitWidth*zoom.value)/2+offsetX.value+editing.x*fitWidth*zoom.value} top={offsetY.value+editing.y*fitWidth*zoom.value} scale={fitWidth*zoom.value} onCommit={value=>{editValueRef.current=value;finishRef.current()}} onValueChange={value=>{editValueRef.current=value}} onMove={(dx,dy)=>{const current=editingRef.current;if(!current)return;const scale=fitWidth*zoom.value;const x=Math.max(0,Math.min(PAGE_WIDTH-current.w,current.x+dx/scale));const y=Math.max(0,current.y+dy/scale);const next={...current,x,y,bbox:[x,y,x+current.w,y+(current.bbox[3]-current.bbox[1])] as [number,number,number,number]};editingRef.current=next;setEditing(next)}}/>}{wordEditing&&<Modal transparent animationType="fade" visible onRequestClose={()=>setWordEditing(null)}><View style={{flex:1,justifyContent:'center',padding:24,backgroundColor:'#0008'}}><View style={{backgroundColor:'#FFFFFF',borderRadius:16,padding:20,gap:12}}><Text style={{fontSize:17,color:'#202020',fontWeight:'600'}}>Tanınan kelimeyi düzelt</Text><TextInput autoFocus value={wordEditing.text} onChangeText={value=>setWordEditing(previous=>previous?{...previous,text:value}:null)} style={{borderWidth:1,borderColor:'#AAAAAA',borderRadius:8,padding:10,color:'#202020',fontSize:17}}/><View style={{flexDirection:'row',justifyContent:'flex-end',gap:20}}><Pressable onPress={()=>setWordEditing(null)}><Text style={{color:'#444444'}}>İptal</Text></Pressable><Pressable onPress={()=>{const value=wordEditing.text.trim();if(value){onChange({...content,beautifications:(content.beautifications??[]).map(b=>({...b,words:b.words.map(w=>w.id===wordEditing.id?{...w,text:value,fontSize:fitWordFont(value,w)}:w)}))})}setWordEditing(null)}}><Text style={{color:'#2466DD',fontWeight:'600'}}>Kaydet</Text></Pressable></View></View></View></Modal>}</View>;
 }
