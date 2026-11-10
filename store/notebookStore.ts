@@ -18,14 +18,14 @@ const convert=(r:NotebookRow):Notebook=>({
 });
 const toInput=(draft:NotebookDraft):NotebookInput=>({...draft,folderId:draft.folder==='Klasörsüz'?null:(useNotebookStore.getState().folders.find(f=>f.name===draft.folder)?.id??folderIds[draft.folder as NotebookFolder]??null),coverImagePath:coverPathFromUri(draft.coverImageUri),coverPresetId:null});
 type State={
- notebooks:Notebook[];deletedNotebooks:(Notebook & {deletedAt:string})[];folders:Folder[];selectedFolder:FolderFilter;sortBy:SortBy;viewMode:ViewMode;hydrated:boolean;
+ lastDeletedId:string|null;clearUndo:()=>void;notebooks:Notebook[];deletedNotebooks:(Notebook & {deletedAt:string})[];folders:Folder[];selectedFolder:FolderFilter;sortBy:SortBy;viewMode:ViewMode;hydrated:boolean;
  hydrate:()=>Promise<void>;refresh:()=>Promise<void>;refreshDeleted:()=>Promise<void>;restoreNotebook:(id:string)=>Promise<void>;permanentlyDeleteNotebook:(id:string)=>Promise<void>;emptyTrash:()=>Promise<void>;refreshFolders:()=>Promise<void>;moveNotebook:(id:string,folderId:string|null)=>Promise<void>;
  setSelectedFolder:(folder:FolderFilter)=>Promise<void>;setSortBy:(sort:SortBy)=>Promise<void>;setViewMode:(mode:ViewMode)=>Promise<void>;
  addNotebook:(draft:NotebookDraft)=>Promise<string|null>;updateNotebook:(id:string,draft:NotebookDraft)=>Promise<boolean>;
  deleteNotebook:(id:string)=>Promise<void>;duplicateNotebook:(id:string)=>Promise<string|null>;toggleFavorite:(id:string)=>Promise<void>;
 };
 export const useNotebookStore=create<State>((set,get)=>({
- notebooks:[],deletedNotebooks:[],folders:[],selectedFolder:'Tümü',sortBy:'updated',viewMode:'grid',hydrated:false,
+ lastDeletedId:null,clearUndo:()=>set({lastDeletedId:null}),notebooks:[],deletedNotebooks:[],folders:[],selectedFolder:'Tümü',sortBy:'updated',viewMode:'grid',hydrated:false,
  hydrate:async()=>{const [folders,rows,sort,view,selected]=await Promise.all([folderRepository.getAll(),notebookRepository.getAll(),settingsRepository.get('sortBy'),settingsRepository.get('viewMode'),settingsRepository.get('selectedFolderId')]);
   set({folders,notebooks:rows.map(convert).map(n=>({...n,folder:(folders.find(f=>f.id===n.folderId)?.name??'Klasörsüz') as NotebookFolder})),sortBy:sort==='title'||sort==='created'?sort:'updated',viewMode:view==='list'?'list':'grid',selectedFolder:(folders.find(f=>f.id===selected)?.name??'Tümü') as FolderFilter,hydrated:true});void notebookRepository.purgeExpired().then(async()=>{await get().refresh();await get().refreshDeleted()}).catch(error=>console.error('30 günlük çöp temizliği başarısız',error));},
  refresh:async()=>{const rows=await notebookRepository.getAll();set({notebooks:rows.map(convert).map(n=>({...n,folder:(get().folders.find(f=>f.id===n.folderId)?.name??'Klasörsüz') as NotebookFolder}))})},
@@ -40,7 +40,7 @@ export const useNotebookStore=create<State>((set,get)=>({
  setViewMode:async mode=>{try{await settingsRepository.set('viewMode',mode);set({viewMode:mode})}catch(e){alert(e)}},
  addNotebook:async draft=>{try{const id=await notebookRepository.create(toInput(draft));await get().refresh();return id}catch(e){alert(e);return null}},
  updateNotebook:async(id,draft)=>{try{await notebookRepository.update(id,toInput(draft));await get().refresh();return true}catch(e){alert(e);return false}},
- deleteNotebook:async id=>{try{await notebookRepository.remove(id);await Promise.all([get().refresh(),get().refreshDeleted()])}catch(e){alert(e)}},
+ deleteNotebook:async id=>{try{await notebookRepository.remove(id);await Promise.all([get().refresh(),get().refreshDeleted()]);set({lastDeletedId:id})}catch(e){alert(e)}},
  duplicateNotebook:async id=>{try{const key=await notebookRepository.duplicate(id);await get().refresh();return key}catch(e){alert(e);return null}},
  toggleFavorite:async id=>{try{await notebookRepository.toggleFavorite(id);await get().refresh()}catch(e){alert(e)}}
 }));
