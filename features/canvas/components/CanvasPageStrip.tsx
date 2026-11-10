@@ -8,9 +8,9 @@ import {parseContent} from '@/features/canvas/engine/content';
 import {PAGE_HEIGHT} from '@/features/canvas/types';
 import type {Page} from '@/types/page';
 import type {ThemeColors} from '@/theme/colors';
-type Props={pages:Page[];selectedId?:string;tablet:boolean;colors:ThemeColors;onSelect:(id:string)=>void;onAdd:()=>void;onMove:(id:string,index:number)=>void;onActions:(id:string)=>void;multiSelect?:boolean;selectedPageIds?:string[];onToggle?:(id:string)=>void};
+type Props={pages:Page[];selectedId?:string;tablet:boolean;colors:ThemeColors;onSelect:(id:string)=>void;onAdd:()=>void;onMove:(id:string,index:number)=>void;onActions:(id:string)=>void;multiSelect?:boolean;selectedPageIds?:string[];onToggle?:(id:string)=>void;onEnterSelection?:(id:string)=>void};
 const SPACING=140;
-const PageItem=memo(function PageItem({page,index,count,tablet,colors,selected,checked,multiSelect,onSelect,onMove,onActions,onToggle}:{page:Page;index:number;count:number;tablet:boolean;colors:ThemeColors;selected:boolean;checked:boolean;multiSelect:boolean;onSelect:(id:string)=>void;onMove:(id:string,index:number)=>void;onActions:(id:string)=>void;onToggle:(id:string)=>void}){
+const PageItem=memo(function PageItem({page,index,count,tablet,colors,selected,checked,multiSelect,onSelect,onMove,onActions,onToggle,onEnterSelection}:{page:Page;index:number;count:number;tablet:boolean;colors:ThemeColors;selected:boolean;checked:boolean;multiSelect:boolean;onSelect:(id:string)=>void;onMove:(id:string,index:number)=>void;onActions:(id:string)=>void;onToggle:(id:string)=>void;onEnterSelection:(id:string)=>void}){
  const translation=useSharedValue(0),active=useSharedValue(false);
  const drag=useMemo(()=>Gesture.Pan().activateAfterLongPress(350).minDistance(1).enabled(!multiSelect)
   .onBegin(()=>{active.value=true;translation.value=0})
@@ -18,18 +18,18 @@ const PageItem=memo(function PageItem({page,index,count,tablet,colors,selected,c
   .onEnd(e=>{const delta=tablet?e.translationY:e.translationX;const target=Math.max(0,Math.min(count-1,index+Math.round(delta/SPACING)));if(target!==index)runOnJS(onMove)(page.id,target)})
   .onFinalize(()=>{translation.value=withSpring(0);active.value=false}),[tablet,multiSelect,index,count,onMove,page.id]);
  const style=useAnimatedStyle(()=>({transform:[tablet?{translateY:translation.value}:{translateX:translation.value},{scale:withSpring(active.value?1.07:1)}],zIndex:active.value?100:0,opacity:active.value?0.92:1}));
- return <GestureDetector gesture={drag}><Animated.View style={[{alignItems:'center',width:tablet?108:100,height:SPACING,justifyContent:'center'},style]}>
- <Pressable accessibilityRole="button" accessibilityLabel={`Sayfa ${index+1}`} accessibilityState={{selected:multiSelect?checked:selected}} onPress={()=>multiSelect?onToggle(page.id):onSelect(page.id)} onLongPress={()=>{}} style={{padding:3,borderRadius:8,borderWidth:2,borderColor:checked||selected?colors.accent:'transparent',backgroundColor:colors.surface}}>
+ return <View style={{alignItems:'center',width:tablet?108:100,height:SPACING,justifyContent:'center'}}>
+ <Pressable accessibilityRole="button" accessibilityLabel={`Sayfa ${index+1}`} accessibilityState={{selected:multiSelect?checked:selected}} onPress={()=>multiSelect?onToggle(page.id):onSelect(page.id)} onLongPress={()=>{if(!multiSelect)onEnterSelection(page.id)}} delayLongPress={420} style={{padding:3,borderRadius:8,borderWidth:2,borderColor:checked||selected?colors.accent:'transparent',backgroundColor:colors.surface}}>
  <PagePreview template={page.template} paperColor={page.paperColor} width={80} height={Math.min(108,Math.max(88,Math.round(108*(parseContent(page.content).h??PAGE_HEIGHT)/PAGE_HEIGHT)))}/>
  {multiSelect&&<View style={{position:'absolute',right:0,top:0,width:22,height:22,borderRadius:11,alignItems:'center',justifyContent:'center',backgroundColor:checked?colors.accent:colors.surfaceRaised,borderWidth:1,borderColor:colors.accent}}>{checked&&<Check size={14} color="#FFFFFF"/>}</View>}
  </Pressable>
  <Text style={{fontSize:12,color:selected?colors.accent:colors.muted,marginTop:3}}>Sayfa {index+1}</Text>
- {!multiSelect&&<Pressable accessibilityRole="button" accessibilityLabel={`Sayfa ${index+1} menüsü`} onPress={()=>onActions(page.id)} style={{height:24,width:48,alignItems:'center',justifyContent:'center'}}><GripVertical size={17} color={colors.muted}/></Pressable>}
- </Animated.View></GestureDetector>;
+ {!multiSelect&&<View style={{flexDirection:'row',alignItems:'center',gap:6}}><Pressable accessibilityRole="button" accessibilityLabel={`Sayfa ${index+1} işlemleri`} onPress={()=>onActions(page.id)} style={{height:28,width:32,alignItems:'center',justifyContent:'center'}}><Text style={{color:colors.muted,fontSize:19}}>⋯</Text></Pressable><GestureDetector gesture={drag}><Animated.View style={[{height:28,width:40,alignItems:'center',justifyContent:'center'},style]}><GripVertical size={19} color={colors.accent}/></Animated.View></GestureDetector></View>}
+ </View>;
 });
-export const CanvasPageStrip=memo(function CanvasPageStrip({pages,selectedId,tablet,colors,onSelect,onAdd,onMove,onActions,multiSelect=false,selectedPageIds=[],onToggle}:Props){
+export const CanvasPageStrip=memo(function CanvasPageStrip({pages,selectedId,tablet,colors,onSelect,onAdd,onMove,onActions,multiSelect=false,selectedPageIds=[],onToggle,onEnterSelection}:Props){
  return <ScrollView horizontal={!tablet} showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false} contentContainerStyle={{padding:12,alignItems:'center',gap:0,flexGrow:tablet?0:1}}>
- {pages.map((page,index)=><PageItem key={page.id} page={page} index={index} count={pages.length} tablet={tablet} colors={colors} selected={page.id===selectedId} checked={selectedPageIds.includes(page.id)} multiSelect={multiSelect} onSelect={onSelect} onMove={onMove} onActions={onActions} onToggle={onToggle??onSelect}/>)}
+ {pages.map((page,index)=><PageItem key={page.id} page={page} index={index} count={pages.length} tablet={tablet} colors={colors} selected={page.id===selectedId} checked={selectedPageIds.includes(page.id)} multiSelect={multiSelect} onSelect={onSelect} onMove={onMove} onActions={onActions} onToggle={onToggle??onSelect} onEnterSelection={onEnterSelection??onSelect}/>)}
  {!multiSelect&&<Pressable accessibilityRole="button" accessibilityLabel="Sayfa ekle" onPress={onAdd} style={{width:90,height:108,borderWidth:1,borderStyle:'dashed',borderColor:colors.border,borderRadius:8,alignItems:'center',justifyContent:'center',gap:5}}><Plus size={24} color={colors.accent}/><Text style={{fontSize:12,color:colors.accent}}>Sayfa ekle</Text></Pressable>}
  </ScrollView>;
 });
