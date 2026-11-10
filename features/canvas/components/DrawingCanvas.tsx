@@ -2,6 +2,7 @@ import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState
 import {View,PixelRatio,Platform,TextInput,BackHandler,Keyboard,type LayoutChangeEvent} from 'react-native';
 import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,Skia,vec,Paragraph,useFonts,TextAlign} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector,PointerType} from 'react-native-gesture-handler';
+import {Inter_400Regular,Inter_700Bold} from '@expo-google-fonts/inter';
 import {useSettingsStore} from '@/store/settingsStore';
 import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
@@ -150,7 +151,7 @@ const Completed=memo(function Completed({content,hiddenIds,fonts}:{content:PageC
  return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)).map(element=>element.type==='text'?<TextLayer key={element.id} element={element} fonts={fonts}/>:<StrokeLayer key={element.id} element={element}/>)}</>;
 });
 export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false,onImageSelectionChange,imageAction,textStyle={fontSize:48,color:'#1B1B2F',bold:false,align:'left'}}:Props){
- const interFonts=useFonts({Inter:require('@expo-google-fonts/inter/Inter_400Regular.ttf'),InterBold:require('@expo-google-fonts/inter/Inter_700Bold.ttf')});
+ const interFonts=useFonts({Inter:Inter_400Regular,InterBold:Inter_700Bold});
  const [editing,setEditing]=useState<TextElement|null>(null);
  const [,setKeyboardLayoutTick]=useState(0);
 
