@@ -53,47 +53,47 @@ export default function BackupScreen(){
   setLabel('Yedek oluşturuldu');setPercent(100);
  });
  const pick=()=>void run(async()=>{
-  const result=await DocumentPicker.getDocumentAsync({type:'*/*',copyToCacheDirectory:true,multiple:false});
-  if(result.canceled)return;
-  const asset=result.assets[0];if(!asset)throw new Error('Bu dosya okunamadı');
   let bytes:Uint8Array;
-  if(Platform.OS==='web'){
-   if(!asset.file)throw new Error('Bu dosya okunamadı');
-   bytes=new Uint8Array(await asset.file.arrayBuffer());
-  }else if(Platform.OS==='android'){
-   // DocumentPicker has already copied the selected document into its cache.
-   // Use the legacy base64 reader for both file:// and content:// URI schemes;
-   // it avoids File.bytes() permission differences between Android providers.
+  if(Platform.OS==='android'){
+   // SAF provides a persistent document URI directly; avoid the Expo Go
+   // DocumentPicker cache file, which can be unreadable on some devices.
+   const permission=await LegacyFileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+   if(!permission.granted)return;
+   const entries=await LegacyFileSystem.StorageAccessFramework.readDirectoryAsync(permission.directoryUri);
+   const candidates=entries.filter(uri=>/\.(?:zip|notex|bin)(?:$|[?#])/i.test(decodeURIComponent(uri)));
+   if(candidates.length===0)throw new Error('Seçilen klasörde .zip, .notex veya .bin yedeği bulunamadı.');
+   // When several backups exist, select the most recent by its ISO date in filename.
+   // SAF returns no reliable timestamps, so show a clear ambiguity error instead.
+   if(candidates.length>1)throw new Error('Klasörde birden fazla yedek var. Geri yüklenecek dosyayı tek başına ayrı bir klasöre taşıyıp o klasörü seç.');
+   const uri=candidates[0];
+   let encoded:string;
    try{
-    const encoded=await LegacyFileSystem.readAsStringAsync(asset.uri,{encoding:LegacyFileSystem.EncodingType.Base64});
-    const binary=atob(encoded);
-    bytes=new Uint8Array(binary.length);
-    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-   }catch(primaryError){
-    try{
-     bytes=await new File(asset.uri).bytes();
-    }catch(fallbackError){
-     console.error('Android yedek URI:',asset.uri,'dosya:',asset.name,'boyut:',asset.size);
-     console.error('Base64 okuma hatası:',primaryError,'File.bytes hatası:',fallbackError);
-     throw new Error('Android seçilen dosyayı okuyamadı: '+(primaryError instanceof Error?primaryError.message:String(primaryError)));
-    }
+    encoded=await LegacyFileSystem.readAsStringAsync(uri,{encoding:LegacyFileSystem.EncodingType.Base64});
+   }catch(e){
+    console.error('Android SAF dosyası okunamadı',uri,e);
+    throw new Error('Seçilen klasördeki yedeğe erişilemedi: '+(e instanceof Error?e.message:String(e)));
    }
-   // Report actual bytes instead of incorrectly treating every read failure as a bad backup.
-   const header=Array.from(bytes.subarray(0,8)).map(n=>n.toString(16).padStart(2,'0')).join(' ');
-   console.info('Notex Android import',asset.name,'bytes:',bytes.length,'header:',header);
-   if(bytes.length<4||bytes[0]!==80||bytes[1]!==75){
-    throw new Error('Seçilen dosya ZIP içeriği taşımıyor ('+bytes.length+' bayt, ilk baytlar: '+header+'). Android üzerinde yeni oluşturulmuş .zip yedeğini seç.');
-   }
-  }else bytes=await new File(asset.uri).bytes();
+   const binary=atob(encoded);
+   bytes=new Uint8Array(binary.length);
+   for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+  }else{
+   const result=await DocumentPicker.getDocumentAsync({type:'*/*',copyToCacheDirectory:true,multiple:false});
+   if(result.canceled)return;
+   const asset=result.assets[0];if(!asset)throw new Error('Bu dosya okunamadı');
+   if(Platform.OS==='web'){
+    if(!asset.file)throw new Error('Bu dosya okunamadı');
+    bytes=new Uint8Array(await asset.file.arrayBuffer());
+   }else bytes=await new File(asset.uri).bytes();
+  }
   let manifest:Awaited<ReturnType<typeof inspectBackup>>['manifest'];
-  try{({manifest}=await inspectBackup(bytes))}catch(e){console.error('Notex ZIP doğrulama hatası',e);throw new Error('ZIP okundu ancak Notex yedek yapısı doğrulanamadı: '+(e instanceof Error?e.message:String(e)))}
+  try{({manifest}=await inspectBackup(bytes))}catch(e){console.error('Notex ZIP doğrulama hatası',e);throw new Error('Seçilen dosya geçerli bir Notex yedeği değil: '+(e instanceof Error?e.message:String(e)))}
   setPending({bytes,summary:`${manifest.counts.notebooks} defter, ${manifest.counts.pages} sayfa, ${manifest.counts.files} resim bulundu`});
  });
  const restore=()=>{if(!pending)return;const bytes=pending.bytes;setPending(null);void run(async()=>{await importBackup(bytes,progress);await refreshFolders();await refresh();Alert.alert('Tamamlandı','Defterler mevcut verilere eklendi.')})};
  const button=(text:string,onPress:()=>void,disabled=false)=><Pressable accessibilityRole="button" disabled={disabled||busy} onPress={onPress} style={{backgroundColor:colors.surfaceRaised,borderRadius:14,padding:18,marginTop:12,opacity:(disabled||busy)?0.5:1}}><Text style={{color:colors.ink,fontSize:16,fontWeight:'600'}}>{text}</Text></Pressable>;
  return <SafeAreaView style={{flex:1,backgroundColor:colors.background}}><View style={{height:60,flexDirection:'row',alignItems:'center',paddingHorizontal:16,gap:8}}><Pressable accessibilityRole="button" accessibilityLabel="Geri dön" onPress={()=>router.back()} style={{width:44,height:44,justifyContent:'center'}}><ArrowLeft color={colors.ink}/></Pressable><Text style={{fontSize:22,fontWeight:'700',color:colors.ink}}>Yedekle ve geri yükle</Text></View><ScrollView contentContainerStyle={{padding:20}}>
   <Text style={{color:colors.muted}}>Defterler, sayfalar, çizimler ve resimler tek bir .notex dosyasına kaydedilir. Silinenler yedeğe dahil edilmez.</Text>
-  {Platform.OS==='android'&&<Text style={{color:colors.muted,marginTop:12}}>Android: Yedek oluştur dediğinde kaydedilecek klasörü seç. Dosya doğrudan o klasöre yazılır; paylaşım ekranı kullanılmaz.</Text>}
+  {Platform.OS==='android'&&<Text style={{color:colors.muted,marginTop:12}}>Android: Yedek oluştururken kayıt klasörünü seç. Geri yüklerken içinde tek yedek bulunan klasörü seç; dosya önbelleğe kopyalanmadan doğrudan okunur.</Text>}
   {button('Yedek oluştur',create)}{button('Yedekten geri yükle',pick)}
   {busy&&<View style={{marginTop:20,gap:10}}><ActivityIndicator color={colors.accent}/><Text style={{color:colors.ink}}>{label} %{percent}</Text><View style={{height:6,backgroundColor:colors.border,borderRadius:4}}><View style={{height:6,width:`${percent}%`,backgroundColor:colors.accent,borderRadius:4}}/></View></View>}
   {!!error&&<Text style={{color:colors.coral,marginTop:16}}>{error}</Text>}
