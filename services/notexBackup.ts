@@ -53,7 +53,7 @@ export async function createBackup(progress:Progress){
  const manifest:Manifest={format:1,appVersion:'1.0.0',exportedAt:new Date().toISOString(),counts:{folders:folders.length,notebooks:notebooks.length,pages:pages.length,files:filePaths.size+imageCount}};
  zip.file('manifest.json',JSON.stringify(manifest));zip.file('data.json',JSON.stringify(transformed));
  progress('Yedek sıkıştırılıyor…',80);await yieldUI();
- const bytes=await zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:3}},m=>progress('Yedek sıkıştırılıyor…',80+Math.round(m.percent*.19)));
+ const bytes=await zip.generateAsync({type:'uint8array',compression:'DEFLATE',compressionOptions:{level:3}},(m:{percent:number})=>progress('Yedek sıkıştırılıyor…',80+Math.round(m.percent*.19)));
  progress('Yedek hazır',100);return bytes;
 }
 export async function inspectBackup(bytes:Uint8Array){
