@@ -226,7 +226,7 @@ const NaturalWord=memo(function NaturalWord({word,fonts}:{word:import('@/feature
   const g=glyphs[index],x=word.bbox[0]+cursor*scale;
   cursor+=layout.width;
   const y=word.baseline-word.fontSize*1.2+g.dy;
-  return <Group key={index} origin={vec(x+layout.width*scale/2,y+word.fontSize/2)} transform={[{rotate:g.angle}]}><Group transform={[{scaleX:scale}]}><Paragraph paragraph={layout.paragraph} x={x/scale} y={y} width={Math.max(32,word.fontSize*2)}/></Group></Group>;
+  return <Group key={index} origin={vec(x+layout.width*scale/2,y+word.fontSize/2)} transform={[{rotate:g.angle}]}><Group transform={[{translateX:x},{scaleX:scale}]}><Paragraph paragraph={layout.paragraph} x={0} y={y} width={Math.max(32,word.fontSize*2)}/></Group></Group>;
  })}</Group>;
 });
 const Completed=memo(function Completed({content,hiddenIds,fonts}:{content:PageContent;hiddenIds?:string[];fonts:ReturnType<typeof useFonts>}){
