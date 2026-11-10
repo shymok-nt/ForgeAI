@@ -150,7 +150,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const current=editingRef.current;if(!current)return;
   editingRef.current=null;setEditing(null);
   const value=draftTextRef.current;
-  const lines=value.split('\\n');
+  const lines=value.split('\n');
   const charsPerLine=Math.max(1,Math.floor(current.w/(current.fontSize*0.55)));
   const lineCount=lines.reduce((n,line)=>n+Math.max(1,Math.ceil(line.length/charsPerLine)),0);
   const height=Math.max(current.fontSize*1.25,lineCount*current.fontSize*1.25);
