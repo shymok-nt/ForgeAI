@@ -1,5 +1,5 @@
 import React,{memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
-import {View,PixelRatio,Platform,TextInput,BackHandler,Keyboard,PanResponder,type LayoutChangeEvent} from 'react-native';
+import {View,PixelRatio,Platform,TextInput,BackHandler,Keyboard,PanResponder,Animated,Text,type LayoutChangeEvent} from 'react-native';
 import {Canvas,Group,Path,Rect,Line,Circle,Image as SkiaImage,Skia,vec,Paragraph,useFonts,TextAlign} from '@shopify/react-native-skia';
 import {Gesture,GestureDetector,PointerType} from 'react-native-gesture-handler';
 import {Inter_400Regular,Inter_700Bold} from '@expo-google-fonts/inter';
@@ -94,23 +94,32 @@ const StaticPaper=memo(function StaticPaper({template,paperColor,pageHeight,fitW
 });
 const InlineTextEditor=memo(function InlineTextEditor({item,left,top,scale,onCommit,onMove}:{item:TextElement;left:number;top:number;scale:number;onCommit:(value:string)=>void;onMove:(dx:number,dy:number)=>void}){
  const [value,setValue]=useState(item.text);
+ const [typing,setTyping]=useState(false);
  const valueRef=useRef(value);valueRef.current=value;
  const done=useRef(false);
  const commit=()=>{if(done.current)return;done.current=true;onCommit(valueRef.current)};
  const moveRef=useRef(onMove);moveRef.current=onMove;
+ const drag=useRef(new Animated.ValueXY()).current;
  const pan=useMemo(()=>PanResponder.create({
   onStartShouldSetPanResponder:()=>true,
-  onMoveShouldSetPanResponder:()=>true,
-  onPanResponderRelease:(_,gesture)=>{if(Math.abs(gesture.dx)+Math.abs(gesture.dy)>2)moveRef.current(gesture.dx,gesture.dy)}
- }),[]);
+  onMoveShouldSetPanResponder:(_,g)=>Math.abs(g.dx)+Math.abs(g.dy)>5,
+  onPanResponderGrant:()=>{drag.setValue({x:0,y:0})},
+  onPanResponderMove:Animated.event([null,{dx:drag.x,dy:drag.y}],{useNativeDriver:false}),
+  onPanResponderRelease:(_,g)=>{
+   if(Math.abs(g.dx)+Math.abs(g.dy)>5){moveRef.current(g.dx,g.dy)}
+   else setTyping(true);
+   drag.setValue({x:0,y:0});
+  },
+  onPanResponderTerminate:()=>drag.setValue({x:0,y:0})
+ }),[drag]);
  useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{commit();return true});return()=>sub.remove()},[]);
  const lineHeight=item.fontSize*1.3*scale;
- return <View style={{position:'absolute',left,top,width:Math.max(72,item.w*scale),minHeight:Math.max(36,lineHeight+12),borderWidth:1,borderColor:'#4385DC',borderRadius:5,backgroundColor:'transparent',overflow:'visible'}}>
-  <View {...pan.panHandlers} accessibilityLabel="Metin kutusunu taşı" style={{position:'absolute',top:-22,left:0,right:0,height:22,alignItems:'center',justifyContent:'center',backgroundColor:'#4385DC',borderTopLeftRadius:5,borderTopRightRadius:5}}>
-   <View style={{width:32,height:3,borderRadius:3,backgroundColor:'#FFFFFF'}}/>
-  </View>
-  <TextInput multiline autoFocus value={value} onChangeText={setValue} onBlur={commit} underlineColorAndroid="transparent" style={{width:'100%',minHeight:lineHeight,fontSize:item.fontSize*scale,lineHeight,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align,color:item.color,backgroundColor:'transparent',padding:0,paddingHorizontal:2,textAlignVertical:'top'}}/>
- </View>;
+ return <Animated.View style={{position:'absolute',left,top,width:Math.max(72,item.w*scale),minHeight:Math.max(36,lineHeight+8),borderWidth:1,borderColor:'#4385DC',borderRadius:4,backgroundColor:'transparent',transform:drag.getTranslateTransform()}}>
+  {typing?<TextInput multiline autoFocus value={value} onChangeText={setValue} onBlur={()=>setTyping(false)} underlineColorAndroid="transparent" style={{width:'100%',minHeight:lineHeight,fontSize:item.fontSize*scale,lineHeight,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align,color:item.color,backgroundColor:'transparent',padding:0,paddingHorizontal:2,textAlignVertical:'top'}}/>:
+   <View {...pan.panHandlers} style={{minHeight:Math.max(36,lineHeight),justifyContent:'center',paddingHorizontal:2}}>
+    <Text style={{fontSize:item.fontSize*scale,lineHeight,color:item.color,fontFamily:item.bold?'Inter_700Bold':'Inter_400Regular',textAlign:item.align}}>{value||'Metin eklemek için dokun'}</Text>
+   </View>}
+ </Animated.View>;
 });
 const paragraphAlign=(align:TextElement['align']):TextAlign=>align==='center'?TextAlign.Center:align==='right'?TextAlign.Right:TextAlign.Left;
 const textLayoutCache=new Map<string,{paragraph:ReturnType<ReturnType<typeof Skia.ParagraphBuilder.Make>['build']>;height:number}>();
@@ -188,11 +197,12 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const next={...current,text:value,bbox:[current.x,current.y,current.x+current.w,current.y+height] as [number,number,number,number]};
   const elements=content.elements.filter(e=>e.id!==current.id);
   if(value.trim())elements.push(next);
-  if((current.text!==value||content.elements.some(e=>e.id===current.id&&(e.x!==current.x||e.y!==current.y)))&&(value.trim()||content.elements.some(e=>e.id===current.id)))onChange({...content,elements});
+  if((current.text!==value||content.elements.some(e=>e.type==='text'&&e.id===current.id&&(e.x!==current.x||e.y!==current.y)))&&(value.trim()||content.elements.some(e=>e.id===current.id)))onChange({...content,elements});
  };
  const finishRef=useRef(finishText);finishRef.current=finishText;
  useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{if(!editingRef.current)return false;finishRef.current();return true});return()=>sub.remove()},[]);
  const beginText=(x:number,y:number)=>{
+   if(editingRef.current){finishRef.current();return;}
   const hit=[...content.elements].reverse().find(e=>e.type==='text'&&x>=e.bbox[0]&&x<=e.bbox[2]&&y>=e.bbox[1]&&y<=e.bbox[3]) as TextElement|undefined;
   const current=hit??{id:Crypto.randomUUID(),type:'text' as const,z:content.elements.length,createdAt:new Date().toISOString(),x,y,w:Math.max(120,Math.min(360,PAGE_WIDTH-x)),text:'',fontSize:textStyle.fontSize,color:textStyle.color,bold:textStyle.bold,align:textStyle.align,bbox:[x,y,x+Math.max(120,Math.min(360,PAGE_WIDTH-x)),y+textStyle.fontSize*1.25] as [number,number,number,number]};
   editingRef.current=current;editValueRef.current=current.text;setEditing(current);
