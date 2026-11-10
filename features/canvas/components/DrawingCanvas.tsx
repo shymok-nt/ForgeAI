@@ -6,6 +6,8 @@ import {Inter_400Regular,Inter_700Bold} from '@expo-google-fonts/inter';
 import {useSettingsStore} from '@/store/settingsStore';
 import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
+import {groupInk} from '@/lib/ink/grouping';
+import {mockRecognizer} from '@/lib/recognition/mock';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement,type TextElement} from '@/features/canvas/types';
 import {makeStroke,strokePath} from '@/features/canvas/engine/geometry';
 import {pixelErase} from '@/features/canvas/engine/pixelEraser';
@@ -16,7 +18,7 @@ import type {PageTemplate,PaperColor} from '@/types/notebook';
 export type Tool='pen'|'highlighter'|'eraser'|'hand'|'select'|'shape'|'text';
 export type Brush={color:string;width:number;opacity:number};
 type Sample=[number,number,number];
-type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;onStrokeComplete?:(tool:'pen'|'highlighter',color:string)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color'|'textStyle';value?:number;color?:string;textStyle?:Partial<Pick<TextElement,'fontSize'|'color'|'bold'|'align'>>;version:number};transformMode?:boolean;onImageSelectionChange?:(id:string|null)=>void;imageAction?:{kind:'grow'|'shrink'|'delete';version:number};textStyle?:{fontSize:number;color:string;bold:boolean;align:'left'|'center'|'right'}};
+type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;onStrokeComplete?:(tool:'pen'|'highlighter',color:string)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color'|'textStyle'|'beautify'|'toggleBeautify';font?:'Inter'|'InterBold';value?:number;color?:string;textStyle?:Partial<Pick<TextElement,'fontSize'|'color'|'bold'|'align'>>;version:number};transformMode?:boolean;onImageSelectionChange?:(id:string|null)=>void;imageAction?:{kind:'grow'|'shrink'|'delete';version:number};textStyle?:{fontSize:number;color:string;bold:boolean;align:'left'|'center'|'right'}};
 const PAPER_STEP=80;
 const normalizeShapeSize=(kind:string,w:number,h:number):[number,number]=>{ 'worklet';
  if(kind==='triangle'){
@@ -202,7 +204,7 @@ const PageImageLayer=memo(function PageImageLayer({item}:{item:import('@/feature
  return image?<SkiaImage image={image} x={item.x} y={item.y} width={item.width} height={item.height} fit="contain"/>:null;
 });
 const Completed=memo(function Completed({content,hiddenIds,fonts}:{content:PageContent;hiddenIds?:string[];fonts:ReturnType<typeof useFonts>}){
- return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)).map(element=>element.type==='text'?<TextLayer key={element.id} element={element} fonts={fonts}/>:<StrokeLayer key={element.id} element={element}/>)}</>;
+ return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)&&!(content.beautifications??[]).some(b=>b.mode==='beautified'&&b.sourceIds.includes(element.id))).map(element=>element.type==='text'?<TextLayer key={element.id} element={element} fonts={fonts}/>:<StrokeLayer key={element.id} element={element}/>)}</>;
 });
 export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,onStrokeComplete,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false,onImageSelectionChange,imageAction,textStyle={fontSize:48,color:'#1B1B2F',bold:false,align:'left'}}:Props){
  const interFonts=useFonts({Inter:[Inter_400Regular],InterBold:[Inter_700Bold]});
@@ -261,6 +263,38 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  const penSettings=useSettingsStore(state=>state.penSettings);
  const [selectedIds,setSelectedIds]=useState<string[]>([]);
  const selectedRef=useRef<string[]>([]);selectedRef.current=selectedIds;
+ useEffect(()=>{
+  if(!selectionAction||selectionAction.kind!=='beautify'&&selectionAction.kind!=='toggleBeautify')return;
+  const ids=selectedRef.current;
+  const source=content.elements.filter((e):e is StrokeElement=>e.type==='stroke'&&ids.includes(e.id));
+  if(selectionAction.kind==='toggleBeautify'){
+   const matching=(content.beautifications??[]).filter(b=>b.sourceIds.some(id=>ids.includes(id)));
+   if(!matching.length)return;
+   onChange({...content,beautifications:(content.beautifications??[]).map(b=>matching.includes(b)?{...b,mode:b.mode==='original'?'beautified' as const:'original' as const}:b)});
+   return;
+  }
+  if(!source.length)return;
+  let cancelled=false;
+  const grouped=groupInk(source);
+  void (async()=>{
+   const words:import('@/features/canvas/types').BeautifiedWord[]=[];
+   for(const line of grouped){
+    for(const word of line.words){
+     const value=await mockRecognizer.recognize(word.strokes);
+     const text=value.trim()||'test';
+     const width=Math.max(1,word.bbox[2]-word.bbox[0]);
+     const height=Math.max(1,word.bbox[3]-word.bbox[1]);
+     const fontSize=Math.max(1,Math.min(200,height*0.82,width/(Math.max(1,text.length)*0.6)));
+     words.push({id:Crypto.randomUUID(),text,bbox:word.bbox,baseline:line.baseline,fontSize,color:word.strokes[0].color,font:selectionAction.font??'Inter'});
+    }
+   }
+   if(cancelled||!words.length)return;
+   const selected=new Set(source.map(e=>e.id));
+   const existing=(content.beautifications??[]).filter(b=>!b.sourceIds.some(id=>selected.has(id)));
+   onChange({...content,beautifications:[...existing,{sourceIds:[...selected],words,mode:'beautified'}]});
+  })().catch(error=>console.error('Ink beautification failed:',error));
+  return()=>{cancelled=true};
+ },[selectionAction?.version]);
  const [imageId,setImageId]=useState<string|null>(null);
  const imageIdRef=useRef<string|null>(null);imageIdRef.current=imageId;
  useEffect(()=>{if(!imageAction||!imageIdRef.current)return;const id=imageIdRef.current;
@@ -855,10 +889,11 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  {(content.images??[]).map(source=>{const item=source.id===displayImageId&&paintedImage?paintedImage:source;const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/>{Platform.OS==='web'&&<><Line p1={vec(cx,item.y)} p2={imageRotatePoint} color="#3388EE" strokeWidth={imageOutlineWidth}/><Circle cx={cx} cy={imageRotateY} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={cx} cy={imageRotateY} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></>}{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={x} cy={y} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></Group>)}</>}</Group>;return item.id===displayImageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={editing?[editing.id]:tool==='select'?selectedIds:undefined} fonts={interFonts}/>
+  {(content.beautifications??[]).filter(b=>b.mode==='beautified').flatMap(b=>b.words).map(word=><TextLayer key={word.id} fonts={interFonts} element={{id:word.id,type:'text',z:0,createdAt:'',x:word.bbox[0],y:word.baseline-word.fontSize*1.2,w:Math.max(1,word.bbox[2]-word.bbox[0]),text:word.text,fontSize:word.fontSize,color:word.color,bold:word.font==='InterBold',align:'left',bbox:word.bbox}}/>)} 
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
  {tool==='select'&&paintedFrame&&<Group transform={selectionTransform}>
-  {paintedElements.map(element=>element.type==='text'?<TextLayer key={element.id} element={element} fonts={interFonts}/>:<StrokeLayer key={element.id} element={element}/>)}
+  {paintedElements.filter(element=>!(content.beautifications??[]).some(b=>b.mode==='beautified'&&b.sourceIds.includes(element.id))).map(element=>element.type==='text'?<TextLayer key={element.id} element={element} fonts={interFonts}/>:<StrokeLayer key={element.id} element={element}/>)}
   {(()=>{
    const bounds=paintedFrame.bounds;
    const rotation=paintedFrame.rotation;
