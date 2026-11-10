@@ -9,7 +9,3 @@ android {
   namespace 'com.notex.inkrecognition'
   defaultConfig { minSdkVersion 23 }
 }
-
-dependencies {
-  implementation 'com.google.mlkit:digital-ink-recognition:18.1.0'
-}
