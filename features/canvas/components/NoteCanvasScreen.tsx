@@ -8,6 +8,7 @@ import {ArrowLeft,Undo2,Redo2,Ellipsis,Eye,Palette,ChevronLeft,ChevronRight,X,Mo
 import {useTheme} from '@/theme/ThemeProvider';
 import {fonts} from '@/theme/fonts';
 import {useNotebookStore} from '@/store/notebookStore';
+import {notebookRepository} from '@/db/repositories/notebookRepository';
 import {usePageStore} from '@/store/pageStore';
 import {settingsRepository} from '@/db/repositories/settingsRepository';
 import {DrawingCanvas,type Tool,type Brush} from './DrawingCanvas';
@@ -41,7 +42,7 @@ export default function NoteCanvasScreen(){
  const action=(kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color',value?:number,color?:string)=>setSelectionAction({kind,value,color,version:Date.now()});
  const [recent,setRecent]=useState<string[]>([]);
  const controllerRef=useRef<CanvasController|null>(null);controllerRef.current=controller;
- useEffect(()=>{if(id){setSelectedId(null);void load(id)}},[id]);
+ useEffect(()=>{let active=true;if(id){void notebookRepository.getById(id).then(row=>{if(!active)return;if(!row){router.replace('/(tabs)');return;}setSelectedId(null);void load(id)}).catch(error=>{console.error('Defter açılamadı',error);if(active)router.replace('/(tabs)')})}return()=>{active=false}},[id,load]);
  useEffect(()=>{let live=true;void settingsRepository.get('canvasToolSettings').then(raw=>{if(!raw||!live)return;try{const s=JSON.parse(raw) as {tool?:Tool;brush?:Brush;recent?:string[];eraserMode?:'pixel'|'stroke';eraserSize?:number};if(s.tool&&['pen','highlighter','eraser','hand'].includes(s.tool))setTool(s.tool);if(s.brush&&typeof s.brush.color==='string'&&typeof s.brush.width==='number'&&typeof s.brush.opacity==='number')setBrush(s.brush);if(Array.isArray(s.recent))setRecent(s.recent);if(s.eraserMode==='pixel'||s.eraserMode==='stroke')setEraserMode(s.eraserMode);if(typeof s.eraserSize==='number')setEraserSize(s.eraserSize)}catch{}}).catch(()=>{});return()=>{live=false}},[]);
  useEffect(()=>{void settingsRepository.set('canvasToolSettings',JSON.stringify({tool,brush,recent,eraserMode,eraserSize})).catch(()=>{})},[tool,brush,recent,eraserMode,eraserSize]);
  const selected=pages.find(p=>p.id===selectedId)??pages[0];const index=selected?pages.findIndex(p=>p.id===selected.id):0;
