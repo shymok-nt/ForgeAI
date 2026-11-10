@@ -27,14 +27,18 @@ function wordToPng(word:InkWord):string{
  for(const stroke of word.strokes){
   const points=stroke.points;
   if(points.length<3)continue;
-  const path=Skia.Path.Make();
   const x=(points[0]-left)*scale+PADDING;
   const y=(points[1]-top)*scale+(height-naturalHeight*scale)/2;
-  path.moveTo(x,y);
-  for(let i=3;i+2<points.length;i+=3)path.lineTo((points[i]-left)*scale+PADDING,(points[i+1]-top)*scale+(height-naturalHeight*scale)/2);
+  const commands=[`M ${x} ${y}`];
+  for(let i=3;i+2<points.length;i+=3){
+   commands.push(`L ${(points[i]-left)*scale+PADDING} ${(points[i+1]-top)*scale+(height-naturalHeight*scale)/2}`);
+  }
   paint.setStrokeWidth(Math.max(1,stroke.width*scale));
   if(points.length===3){const dot=Skia.Paint();dot.setColor(Skia.Color('#000000'));canvas.drawCircle(x,y,Math.max(1,stroke.width*scale/2),dot)}
-  else canvas.drawPath(path,paint);
+  else {
+   const path=Skia.Path.MakeFromSVGString(commands.join(' '));
+   if(path)canvas.drawPath(path,paint);
+  }
  }
  const snapshot=surface.makeImageSnapshot();
  const encoded=snapshot.encodeToBase64();
