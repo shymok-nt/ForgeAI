@@ -162,7 +162,14 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   const lines=value.split('\n');
   const charsPerLine=Math.max(1,Math.floor(current.w/(current.fontSize*0.55)));
   const lineCount=lines.reduce((n,line)=>n+Math.max(1,Math.ceil(line.length/charsPerLine)),0);
-  const height=Math.max(current.fontSize*1.25,lineCount*current.fontSize*1.25);
+  let height=Math.max(current.fontSize*1.25,lineCount*current.fontSize*1.25);
+  if(interFonts&&value.trim()){
+   const builder=Skia.ParagraphBuilder.Make({textAlign:current.align},interFonts);
+   builder.pushStyle({fontFamilies:[current.bold?'InterBold':'Inter'],fontSize:current.fontSize,color:Skia.Color(current.color)});
+   builder.addText(value);builder.pop();
+   const paragraph=builder.build();paragraph.layout(current.w);
+   height=Math.max(current.fontSize*1.25,paragraph.getHeight());
+  }
   const next={...current,text:value,bbox:[current.x,current.y,current.x+current.w,current.y+height] as [number,number,number,number]};
   const elements=content.elements.filter(e=>e.id!==current.id);
   if(value.trim())elements.push(next);
