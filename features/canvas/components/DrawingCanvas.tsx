@@ -7,7 +7,7 @@ import {useSettingsStore} from '@/store/settingsStore';
 import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
 import {groupInk} from '@/lib/ink/grouping';
-import {mockRecognizer} from '@/lib/recognition/mock';
+import {recognizeWords} from '@/lib/recognition/cloud';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement,type TextElement} from '@/features/canvas/types';
 import {makeStroke,strokePath} from '@/features/canvas/engine/geometry';
 import {pixelErase} from '@/features/canvas/engine/pixelEraser';
@@ -18,7 +18,7 @@ import type {PageTemplate,PaperColor} from '@/types/notebook';
 export type Tool='pen'|'highlighter'|'eraser'|'hand'|'select'|'shape'|'text';
 export type Brush={color:string;width:number;opacity:number};
 type Sample=[number,number,number];
-type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;onStrokeComplete?:(tool:'pen'|'highlighter',color:string)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color'|'textStyle'|'beautify'|'toggleBeautify';font?:'Inter'|'InterBold';value?:number;color?:string;textStyle?:Partial<Pick<TextElement,'fontSize'|'color'|'bold'|'align'>>;version:number};transformMode?:boolean;onImageSelectionChange?:(id:string|null)=>void;imageAction?:{kind:'grow'|'shrink'|'delete';version:number};textStyle?:{fontSize:number;color:string;bold:boolean;align:'left'|'center'|'right'}};
+type Props={content:PageContent;template:PageTemplate;paperColor:PaperColor;tool:Tool;brush:Brush;eraserSize:number;eraserMode?:'pixel'|'stroke';onChange:(next:PageContent)=>void;onDrawingActive?:(active:boolean)=>void;onStrokeComplete?:(tool:'pen'|'highlighter',color:string)=>void;shapeKind?:ShapeMode;shapeFill?:boolean;onSelectionChange?:(ids:string[])=>void;onRecognitionState?:(loading:boolean,error:string|null)=>void;selectionAction?:{kind:'delete'|'duplicate'|'move'|'scale'|'rotate'|'color'|'textStyle'|'beautify'|'toggleBeautify';font?:'Inter'|'InterBold';value?:number;color?:string;textStyle?:Partial<Pick<TextElement,'fontSize'|'color'|'bold'|'align'>>;version:number};transformMode?:boolean;onImageSelectionChange?:(id:string|null)=>void;imageAction?:{kind:'grow'|'shrink'|'delete';version:number};textStyle?:{fontSize:number;color:string;bold:boolean;align:'left'|'center'|'right'}};
 const PAPER_STEP=80;
 const normalizeShapeSize=(kind:string,w:number,h:number):[number,number]=>{ 'worklet';
  if(kind==='triangle'){
@@ -206,7 +206,7 @@ const PageImageLayer=memo(function PageImageLayer({item}:{item:import('@/feature
 const Completed=memo(function Completed({content,hiddenIds,fonts}:{content:PageContent;hiddenIds?:string[];fonts:ReturnType<typeof useFonts>}){
  return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)&&!(content.beautifications??[]).some(b=>b.mode==='beautified'&&b.sourceIds.includes(element.id))).map(element=>element.type==='text'?<TextLayer key={element.id} element={element} fonts={fonts}/>:<StrokeLayer key={element.id} element={element}/>)}</>;
 });
-export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,onStrokeComplete,shapeKind='auto',shapeFill=false,onSelectionChange,selectionAction,transformMode=false,onImageSelectionChange,imageAction,textStyle={fontSize:48,color:'#1B1B2F',bold:false,align:'left'}}:Props){
+export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize,eraserMode='pixel',onChange,onDrawingActive,onStrokeComplete,shapeKind='auto',shapeFill=false,onSelectionChange,onRecognitionState,selectionAction,transformMode=false,onImageSelectionChange,imageAction,textStyle={fontSize:48,color:'#1B1B2F',bold:false,align:'left'}}:Props){
  const interFonts=useFonts({Inter:[Inter_400Regular],InterBold:[Inter_700Bold]});
  const [editing,setEditing]=useState<TextElement|null>(null);
  const pendingCloseRef=useRef<{id:string;text:string;remove:boolean}|null>(null);
@@ -276,23 +276,29 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
   if(!source.length)return;
   let cancelled=false;
   const grouped=groupInk(source);
+  onRecognitionState?.(true,null);
   void (async()=>{
+   const flat=grouped.flatMap(line=>line.words);
+   const recognized=await recognizeWords(flat,'tr');
+   if(cancelled)return;
    const words:import('@/features/canvas/types').BeautifiedWord[]=[];
+   let index=0;
    for(const line of grouped){
     for(const word of line.words){
-     const value=await mockRecognizer.recognize(word.strokes);
-     const text=value.trim()||'test';
+     const text=recognized[index++]?.trim()??'';
+     if(!text)continue;
      const width=Math.max(1,word.bbox[2]-word.bbox[0]);
      const height=Math.max(1,word.bbox[3]-word.bbox[1]);
      const fontSize=Math.max(1,Math.min(200,height*0.82,width/(Math.max(1,text.length)*0.6)));
      words.push({id:Crypto.randomUUID(),text,bbox:word.bbox,baseline:line.baseline,fontSize,color:word.strokes[0].color,font:selectionAction.font??'Inter'});
     }
    }
-   if(cancelled||!words.length)return;
+   if(!words.length)throw new Error('Seçilen yazı tanınamadı. Orijinal yazı korundu.');
    const selected=new Set(source.map(e=>e.id));
    const existing=(content.beautifications??[]).filter(b=>!b.sourceIds.some(id=>selected.has(id)));
    onChange({...content,beautifications:[...existing,{sourceIds:[...selected],words,mode:'beautified'}]});
-  })().catch(error=>console.error('Ink beautification failed:',error));
+   onRecognitionState?.(false,null);
+  })().catch(error=>{if(!cancelled)onRecognitionState?.(false,error instanceof Error?error.message:'El yazısı tanınamadı. Orijinal yazı korundu.')});
   return()=>{cancelled=true};
  },[selectionAction?.version]);
  const [imageId,setImageId]=useState<string|null>(null);
