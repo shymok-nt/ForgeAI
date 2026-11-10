@@ -10,7 +10,10 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "check": "expo install --check && tsc --noEmit"
+    "check": "expo install --check && tsc --noEmit",
+    "setup:skia-web": "setup-skia-web public",
+    "prestart": "npm run setup:skia-web",
+    "preweb": "npm run setup:skia-web"
   },
   "dependencies": {
     "expo": "~58.0.23",
