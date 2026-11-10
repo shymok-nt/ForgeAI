@@ -152,7 +152,24 @@ const TextLayer=memo(function TextLayer({element,fonts}:{element:TextElement;fon
   if(textLayoutCache.size>400){const first=textLayoutCache.keys().next().value;if(first)textLayoutCache.delete(first)}
   return result;
  },[key,fonts]);
- return layout?<Paragraph paragraph={layout.paragraph} x={element.x} y={element.y} width={element.w}/>:null;
+ const erasePaths=useMemo(()=>element.erasures?.map(erase=>{
+  const path=Skia.Path.Make();
+  const pts=erase.points;
+  if(pts.length>=2){
+   path.moveTo(pts[0],pts[1]);
+   for(let i=2;i+1<pts.length;i+=2)path.lineTo(pts[i],pts[i+1]);
+  }
+  return {path,radius:erase.radius,first:pts.length>=2?[pts[0],pts[1]]:null};
+ })??[],[element.erasures]);
+ if(!layout)return null;
+ if(!erasePaths.length)return <Paragraph paragraph={layout.paragraph} x={element.x} y={element.y} width={element.w}/>;
+ return <Group layer>
+  <Paragraph paragraph={layout.paragraph} x={element.x} y={element.y} width={element.w}/>
+  {erasePaths.map((erase,i)=><React.Fragment key={i}>
+   <Path path={erase.path} color="black" style="stroke" strokeWidth={erase.radius*2} strokeCap="round" strokeJoin="round" blendMode="clear"/>
+   {erase.first&&<Circle cx={erase.first[0]} cy={erase.first[1]} r={erase.radius} color="black" blendMode="clear"/>}
+  </React.Fragment>)}
+ </Group>;
 });
 const StrokeLayer=memo(function StrokeLayer({element}:{element:Element}){
  const path=useMemo(()=>cachedPath(element),[element]);
