@@ -49,6 +49,7 @@ export function pixelErase(elements:Element[],path:P[],radius:number,wholeStroke
  const result:Element[]=[];
  for(const e of elements){
   if(!overlaps(e.bbox,eraserBox)){result.push(e);continue}
+  if(e.type==='text'){result.push(e);continue}
   let source:StrokeElement;
   if(e.type==='shape'){
    if(e.fill||wholeStroke){
