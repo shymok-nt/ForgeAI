@@ -7,6 +7,7 @@ import {useSettingsStore} from '@/store/settingsStore';
 import {useDerivedValue,useSharedValue,runOnJS} from 'react-native-reanimated';
 import * as Crypto from 'expo-crypto';
 import {groupInk} from '@/lib/ink/grouping';
+import {glyphOffsets,fitWordFont} from '@/lib/ink/naturalText';
 import {recognizeWords} from '@/lib/recognition/cloud';
 import {PAGE_WIDTH,PAGE_HEIGHT,type PageContent,type StrokeElement,type TextElement} from '@/features/canvas/types';
 import {makeStroke,strokePath} from '@/features/canvas/engine/geometry';
@@ -202,6 +203,31 @@ const PageImageLayer=memo(function PageImageLayer({item}:{item:import('@/feature
   }
  },[item.uri]);
  return image?<SkiaImage image={image} x={item.x} y={item.y} width={item.width} height={item.height} fit="contain"/>:null;
+});
+const NaturalWord=memo(function NaturalWord({word,fonts}:{word:import('@/features/canvas/types').BeautifiedWord;fonts:ReturnType<typeof useFonts>}){
+ const glyphs=useMemo(()=>glyphOffsets(word.text),[word.text]);
+ const layouts=useMemo(()=>{
+  if(!fonts||!glyphs.length)return [];
+  return glyphs.map(g=>{
+   const builder=Skia.ParagraphBuilder.Make({},fonts);
+   builder.pushStyle({fontFamilies:[word.font],fontSize:word.fontSize,color:Skia.Color(word.color)});
+   builder.addText(g.char);builder.pop();
+   const paragraph=builder.build();
+   paragraph.layout(Math.max(32,word.fontSize*2));
+   return {paragraph,width:Math.max(1,paragraph.getLongestLine())};
+  });
+ },[fonts,glyphs,word.font,word.fontSize,word.color]);
+ if(!layouts.length)return null;
+ const total=layouts.reduce((sum,g)=>sum+g.width,0);
+ const available=Math.max(1,word.bbox[2]-word.bbox[0]);
+ const scale=Math.min(1,available/Math.max(1,total));
+ let cursor=0;
+ return <Group>{layouts.map((layout,index)=>{
+  const g=glyphs[index],x=word.bbox[0]+cursor*scale;
+  cursor+=layout.width;
+  const y=word.baseline-word.fontSize*1.2+g.dy;
+  return <Group key={index} origin={vec(x+layout.width*scale/2,y+word.fontSize/2)} transform={[{rotate:g.angle}]}><Group transform={[{scaleX:scale}]}><Paragraph paragraph={layout.paragraph} x={x/scale} y={y} width={Math.max(32,word.fontSize*2)}/></Group></Group>;
+ })}</Group>;
 });
 const Completed=memo(function Completed({content,hiddenIds,fonts}:{content:PageContent;hiddenIds?:string[];fonts:ReturnType<typeof useFonts>}){
  return <>{content.elements.filter(element=>!hiddenIds?.includes(element.id)&&!(content.beautifications??[]).some(b=>b.mode==='beautified'&&b.sourceIds.includes(element.id))).map(element=>element.type==='text'?<TextLayer key={element.id} element={element} fonts={fonts}/>:<StrokeLayer key={element.id} element={element}/>)}</>;
@@ -895,7 +921,7 @@ export function DrawingCanvas({content,template,paperColor,tool,brush,eraserSize
  {(content.images??[]).map(source=>{const item=source.id===displayImageId&&paintedImage?paintedImage:source;const cx=item.x+item.width/2,cy=item.y+item.height/2;const art=<Group origin={vec(cx,cy)} transform={[{rotate:item.rotation??0}]}><PageImageLayer item={item}/>{item.id===imageId&&<><Rect x={item.x} y={item.y} width={item.width} height={item.height} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/>{Platform.OS==='web'&&<><Line p1={vec(cx,item.y)} p2={imageRotatePoint} color="#3388EE" strokeWidth={imageOutlineWidth}/><Circle cx={cx} cy={imageRotateY} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={cx} cy={imageRotateY} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></>}{Platform.OS==='web'&&[[item.x,item.y],[item.x+item.width,item.y],[item.x,item.y+item.height],[item.x+item.width,item.y+item.height]].map(([x,y],index)=><Group key={index}><Circle cx={x} cy={y} r={imageHandleRadius} color="#FFFFFF"/><Circle cx={x} cy={y} r={imageHandleRadius} color="#3388EE" style="stroke" strokeWidth={imageOutlineWidth}/></Group>)}</>}</Group>;return item.id===displayImageId?<Group key={item.id} transform={imageTransform}>{art}</Group>:<Group key={item.id}>{art}</Group>})}
  <Group layer={tool==='eraser'}>
   <Completed content={content} hiddenIds={editing?[editing.id]:tool==='select'?selectedIds:undefined} fonts={interFonts}/>
-  {(content.beautifications??[]).filter(b=>b.mode==='beautified').flatMap(b=>b.words).map(word=><TextLayer key={word.id} fonts={interFonts} element={{id:word.id,type:'text',z:0,createdAt:'',x:word.bbox[0],y:word.baseline-word.fontSize*1.2,w:Math.max(1,word.bbox[2]-word.bbox[0]),text:word.text,fontSize:word.fontSize,color:word.color,bold:word.font==='InterBold',align:'left',bbox:word.bbox}}/>)} 
+  {(content.beautifications??[]).filter(b=>b.mode==='beautified').flatMap(b=>b.words).map(word=><NaturalWord key={word.id} fonts={interFonts} word={word}/>)} 
   {tool==='eraser'&&<Path path={draft} blendMode="clear" color="black" style="stroke" strokeWidth={eraserWidth} strokeCap="round" strokeJoin="round"/>}
  </Group>
  {tool==='select'&&paintedFrame&&<Group transform={selectionTransform}>
