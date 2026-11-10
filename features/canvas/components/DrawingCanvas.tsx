@@ -101,7 +101,22 @@ const InlineTextEditor=memo(function InlineTextEditor({item,left,top,scale,onCom
  const commit=()=>{if(done.current)return;done.current=true;onCommit(valueRef.current)};
  const drag=useRef(new Animated.ValueXY()).current;
  const moveRef=useRef(onMove);moveRef.current=onMove;
- const hold=useMemo(()=>Gesture.Pan().activateAfterLongPress(350).minDistance(0).onStart(()=>{drag.setValue({x:0,y:0})}).onUpdate(e=>{drag.setValue({x:e.translationX,y:e.translationY})}).onEnd(e=>{moveRef.current(e.translationX,e.translationY);drag.setValue({x:0,y:0})}).onFinalize(()=>drag.setValue({x:0,y:0})).runOnJS(true),[drag]);
+ const previousPosition=useRef({x:item.x,y:item.y});
+ const dragCommitted=useRef(false);
+ // Preserve the preview until React has committed the new page coordinates.
+ // Resetting on gesture release caused a one-frame flash at the old position.
+ useLayoutEffect(()=>{
+  if(previousPosition.current.x!==item.x||previousPosition.current.y!==item.y){
+   previousPosition.current={x:item.x,y:item.y};
+   drag.setValue({x:0,y:0});
+  }
+ },[item.x,item.y,drag]);
+ const hold=useMemo(()=>Gesture.Pan().activateAfterLongPress(350).minDistance(0)
+  .onStart(()=>{dragCommitted.current=false;drag.setValue({x:0,y:0})})
+  .onUpdate(e=>{drag.setValue({x:e.translationX,y:e.translationY})})
+  .onEnd(e=>{dragCommitted.current=true;moveRef.current(e.translationX,e.translationY)})
+  .onFinalize(()=>{if(!dragCommitted.current)drag.setValue({x:0,y:0})})
+  .runOnJS(true),[drag]);
  useEffect(()=>{const sub=BackHandler.addEventListener('hardwareBackPress',()=>{commit();return true});return()=>sub.remove()},[]);
  const lineHeight=item.fontSize*1.3*scale;
  const minHeight=Math.max(48,lineHeight*3+8);
